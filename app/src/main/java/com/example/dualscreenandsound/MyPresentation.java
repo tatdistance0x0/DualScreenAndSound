@@ -20,10 +20,12 @@ public class MyPresentation extends Presentation {
     private boolean isPlaying = false;  // 用于追踪视频是否正在播放
     private AudioDeviceInfo[] mOutputDevices;
     private AudioManager mAudioManager;
+    private AudioDeviceInfo selectedDevice;
     private Surface surface;  // 引用 Surface，确保在正确的时机设置 display
     public MyPresentation(Context context, Display display) {
         super(context, display);
         setContentView(R.layout.presentation);  // 这里你可以定义布局文件，包含一个 SurfaceView
+        mediaPlayer = new MediaPlayer();
         surfaceView = findViewById(R.id.surface_view); // 获取 SurfaceView
         // 初始化音频管理器
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
@@ -57,25 +59,23 @@ public class MyPresentation extends Presentation {
 
 
     // 设置视频路径并选择音频输出设备
-    public void setVideoPathAndAudioDevice(String videoPath) {
+    public void setVideoPathAndAudioDevice(AudioDeviceInfo selectedDevice) {
         try {
-            mediaPlayer = new MediaPlayer();
-            mediaPlayer.setDataSource(videoPath);  // 设置视频路径
 
+            mediaPlayer.reset();
+            mediaPlayer.setDataSource("/sdcard/Music/easy love.mp4");  // 设置视频路径
             // 获取所有输出设备
-            mOutputDevices = mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-
+//            mOutputDevices = mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
             // 遍历输出设备，选择一个合适的设备
-            for (AudioDeviceInfo device : mOutputDevices) {
-                if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-                    boolean success = mediaPlayer.setPreferredDevice(device);
-                    if (success) {
-                        Log.d("AudioDevice", "已设置音频输出设备为: " + device.getType());
-                    } else {
-                        Log.d("AudioDevice", "设置音频设备失败");
-                    }
-                }
+
+            boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
+            if (success) {
+                Log.d("AudioDevice", "已设置音频输出设备为: " + selectedDevice.getType());
+            } else {
+                Log.d("AudioDevice", "设置音频设备失败");
             }
+
+
             mediaPlayer.prepare();  // 异步准备
         } catch (IOException e) {
             Log.e("MyPresentation", "设置视频路径和音频设备时出错", e);
