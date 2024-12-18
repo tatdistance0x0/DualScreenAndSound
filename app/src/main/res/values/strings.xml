@@ -1,7 +1,8 @@
 <resources>
     <string name="app_name">DualScreenAndSound</string>
+    <string name="displaymanager">主屏播放</string>
     <string name="presentation_displaymanager">副屏播放</string>
-    <string name="btn_set_audio_device_type">设置音频通路</string>
+    <string name="btn_set_audio_device_type">设置主屏音频通路</string>
     <string name="btn_set_presentation_audio_device_type">设置副屏音频通路</string>
 
 </resources>
