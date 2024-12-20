@@ -49,9 +49,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         mediaPlayer = new MediaPlayer();
 //        mAudioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        try {
+            mediaPlayer.setDataSource("/sdcard/Music/Melody.mp4");  // 设置视频路径
+            mediaPlayer.prepare();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
         /********************
          添加音频路由设备的下拉列表
@@ -206,8 +212,8 @@ public class MainActivity extends AppCompatActivity {
     }
     // 设置音频设备
     private void setAudioDevice(AudioDeviceInfo selectedDevice) throws IOException {
-        mediaPlayer.reset();
-        mediaPlayer.setDataSource("/sdcard/Music/Melody.mp4");  // 设置视频路径
+//        mediaPlayer.reset();
+
         boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
         if (success) {
             Log.d("AudioDevice", "已设置音频输出为: " + getDeviceTypeName(selectedDevice.getType()));
@@ -215,7 +221,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d("AudioDevice", "设置设备失败");
         }
         // 准备和开始播放
-        mediaPlayer.prepare();
+
     }
 
     // 释放 MediaPlayer 资源
@@ -246,13 +252,22 @@ public class MainActivity extends AppCompatActivity {
 
         if (displays != null && displays.length > 0) {
             Display display = displays[displays.length - 1];  // 选择最后一个显示设备
-            presentation = new MyPresentation(this, display);
-            Log.d("AudioDevice", "enter displayVideoOnSecondScreen " );
+            // 如果已经有 presentation，则更新其内容
+            if (presentation != null) {
+                // 更新 presentation 内容并设置音频设备
+                presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设备
+                presentation.show();  // 显示 Presentation
 
-            // 在 Presentation 中播放视频
-            presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设备
-            // 显示 Presentation
-            presentation.show();
+                Log.d("AudioDevice", "Updated existing presentation on second screen.");
+            } else {
+                // 如果没有 presentation，创建新的 presentation 对象
+                presentation = new MyPresentation(this, display);
+                presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设备
+                presentation.show();  // 显示 Presentation
+
+                Log.d("AudioDevice", "Created new presentation on second screen.");
+            }
+
         } else {
             Toast.makeText(this, "No external display found.", Toast.LENGTH_SHORT).show();
         }

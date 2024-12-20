@@ -25,10 +25,17 @@ public class MyPresentation extends Presentation {
     public MyPresentation(Context context, Display display) {
         super(context, display);
         setContentView(R.layout.presentation);  // 这里你可以定义布局文件，包含一个 SurfaceView
+        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mediaPlayer = new MediaPlayer();
+        try {
+            mediaPlayer.setDataSource("/sdcard/Music/easy love.mp4");  // 设置视频路径
+            mediaPlayer.prepare();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         surfaceView = findViewById(R.id.surface_view); // 获取 SurfaceView
         // 初始化音频管理器
-        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+
         // 注册 SurfaceHolder.Callback
         SurfaceHolder holder = surfaceView.getHolder();
         holder.addCallback(new SurfaceHolder.Callback() {
@@ -60,13 +67,6 @@ public class MyPresentation extends Presentation {
 
     // 设置视频路径并选择音频输出设备
     public void setVideoPathAndAudioDevice(AudioDeviceInfo selectedDevice) {
-        try {
-
-            mediaPlayer.reset();
-            mediaPlayer.setDataSource("/sdcard/Music/easy love.mp4");  // 设置视频路径
-            // 获取所有输出设备
-//            mOutputDevices = mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-            // 遍历输出设备，选择一个合适的设备
 
             boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
             if (success) {
@@ -74,12 +74,6 @@ public class MyPresentation extends Presentation {
             } else {
                 Log.d("AudioDevice", "设置音频设备失败");
             }
-
-
-            mediaPlayer.prepare();  // 异步准备
-        } catch (IOException e) {
-            Log.e("MyPresentation", "设置视频路径和音频设备时出错", e);
-        }
     }
 
 
