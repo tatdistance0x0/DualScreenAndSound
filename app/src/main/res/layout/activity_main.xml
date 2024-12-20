@@ -16,6 +16,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/presentation_displaymanager" />
+<!--    <Button-->
+<!--        android:id="@+id/btn_selectfile"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:text="@string/btn_selectfile" />-->
 
 <!--    <Button-->
 <!--        android:id="@+id/btn_set_audio_device_type"-->
@@ -23,19 +28,33 @@
 <!--        android:layout_height="wrap_content"-->
 <!--        android:text="@string/btn_set_audio_device_type" />-->
 
-    <Button
-        android:id="@+id/btn_set_presentation_audio_device_type"
+<!--    <Button-->
+<!--        android:id="@+id/btn_set_presentation_audio_device_type"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:text="@string/btn_set_presentation_audio_device_type" />-->
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/btn_set_presentation_audio_device_type" />
+        android:text="设置主屏音频路由"
+        android:layout_marginTop="16dp"
+        android:textColor="#000000"
+        android:textSize="20sp" />
     <Spinner
         android:id="@+id/spinner_audio_devices"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"/>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="设置副屏音频路由"
+        android:layout_marginTop="16dp"
+        android:textColor="#000000"
+        android:textSize="20sp" />
     <Spinner
         android:id="@+id/spinner_audio_presentation_devices"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:layout_height="wrap_content" />
 
     <SurfaceView
         android:id="@+id/surfaceView"

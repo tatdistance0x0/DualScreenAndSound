@@ -120,8 +120,6 @@ public class MainActivity extends AppCompatActivity {
          *********************/
         Button btn1 = findViewById(R.id.btn_displaymanager);
         Button btn2 = findViewById(R.id.btn_presentation_displaymanager);
-//        Button btn3 = findViewById(R.id.btn_set_audio_device_type);
-        Button btn4 = findViewById(R.id.btn_set_presentation_audio_device_type);
         // 按钮点击事件
 
         // 按钮点击事件
@@ -170,29 +168,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-//        btn3.setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View v) {
-//                try {
-//                    setAudioDevice();
-//                } catch (IOException e) {
-//                    throw new RuntimeException(e);
-//                }
-//            }
-//
-//        });
-
-//        btn4.setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View v) {
-//                try {
-//                    showSecondByDisplayManager(MainActivity.this);
-//                } catch (IOException e) {
-//                    throw new RuntimeException(e);
-//                }
-//
-//            }
-//        });
     }
 
     // 检查是否拥有读取存储的权限
