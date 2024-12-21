@@ -1,7 +1,6 @@
 package com.example.dualscreenandsound;
 
 import android.Manifest;
-import android.app.Presentation;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -11,13 +10,10 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.Display;
-import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.View;
 import android.widget.AdapterView;
@@ -25,20 +21,14 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.Toast;
-import android.widget.VideoView;
-
-import androidx.activity.result.ActivityResult;
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import java.io.File;
+
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -49,14 +39,12 @@ public class MainActivity extends AppCompatActivity {
     private MyPresentation presentation;  // 用来保存对 Presentation 的引用
     private boolean isVideoPlaying = false;  // 用来追踪视频是否正在播放
     private MediaPlayer mediaPlayer;
-    private AudioDeviceInfo[] mOutputDevices;
     private SurfaceView surfaceView;
-    private Surface surface;
-
     private List<AudioDeviceInfo> OutputDevices;
     private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2;
-    private static final int REQUEST_CODE_SELECT_FILE = 1;
-    private String selectedFilePath, selectedPresentionFilePath = "";  // 用于保存选择的文件路径
+    private String selectedFilePath = "";  // 用于保存选择的文件路径
+    private String selectedPresentionFilePath = "";  // 用于保存选择的文件路径
+    private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectPresentationFileLauncher;  // 声明 ActivityResultLauncher
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,7 +78,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
                 AudioDeviceInfo selectedDevice = OutputDevices.get(position);
-                if (selectedFilePath != null && !selectedFilePath.isEmpty()) {
+                if (selectedFilePath != null  && !selectedFilePath.isEmpty()) {
                     try {
                         setAudioDevice(selectedDevice);  // 根据选择的设备设置音频输出
                     } catch (IOException e) {
@@ -130,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         surfaceView = findViewById(R.id.surfaceView);  // SurfaceView 用于显示视频
-        surface = surfaceView.getHolder().getSurface();
+        surfaceView.getHolder().getSurface();
 
         /********************
          添加主副屏视频播放的按钮
@@ -144,42 +132,59 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 // 检查权限并执行播放或暂停操作
-                if (checkPermissions()) {
-                    if (mediaPlayer.isPlaying()) {
-                        // 如果正在播放，则暂停
-                        mediaPlayer.pause();
-                        btn1.setText("播放");
+//                if (checkPermissions()) {
+
+                if (mediaPlayer != null) {  // 检查 mediaPlayer 是否为 null
+                    if (isAudioDeviceSet) {
+                            if (mediaPlayer.isPlaying()) {
+                                // 如果正在播放，则暂停
+                                mediaPlayer.pause();
+                                btn1.setText("播放");
+                            } else {
+                                // 如果没有播放，则开始播放
+                                mediaPlayer.setDisplay(surfaceView.getHolder());  // 设置显示 SurfaceView
+                                mediaPlayer.start();
+                                btn1.setText("暂停");
+                            }
+                        }else{
+                            Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
+                        }
                     } else {
-                        // 如果没有播放，则开始播放
-                        mediaPlayer.setDisplay(surfaceView.getHolder());  // 设置显示 SurfaceView
-                        mediaPlayer.start();
-                        btn1.setText("暂停");
+                        // 如果 mediaPlayer 为 null，则提示或创建 mediaPlayer
+                        Toast.makeText(getApplicationContext(), "未选择文件", Toast.LENGTH_SHORT).show();
                     }
-                } else {
-                    requestPermissions();
-                }
+//                } else {
+//                    requestPermissions();
+//                }
+
             }
         });
 
         btn2.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // 如果 presentation 已经初始化
+                // 检查 presentation 和 mediaPlayer 是否都已初始化
                 if (presentation != null) {
-                    // 切换播放/暂停状态
-                    Log.d("MainActivity", "presentation");
-                    if (isVideoPlaying) {
-                        presentation.pauseVideo();  // 暂停视频
-                        btn2.setText("播放");
+                    // 如果 presentation 已经初始化
+                    Log.d("MainActivity", "presentation is initialized.");
+                    if (mediaPlayer != null) {
+                        // 如果 mediaPlayer 已初始化
+                        if (isVideoPlaying) {
+                            presentation.pauseVideo();  // 暂停视频
+                            btn2.setText("播放");
+                        } else {
+                            presentation.playVideo();   // 播放视频
+                            btn2.setText("暂停");
+                        }
+                        isVideoPlaying = !isVideoPlaying;  // 切换播放/暂停状态
                     } else {
-                        presentation.playVideo();   // 播放视频
-                        btn2.setText("暂停");
+                        // 如果 mediaPlayer 为 null，提示用户
+                        Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
                     }
-                    isVideoPlaying = !isVideoPlaying;  // 切换播放/暂停状态
-                }else{
-                    Log.e("MainActivity", "presentation is null. Cannot control video playback.");
+                } else {
+                    // 如果 presentation 为 null，提示用户
+                    Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
                 }
-
             }
         });
 
@@ -326,11 +331,14 @@ public class MainActivity extends AppCompatActivity {
     private void setAudioDevice(AudioDeviceInfo selectedDevice) throws IOException {
         boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
         if (success) {
+            isAudioDeviceSet = true;  // 设置成功，标志位为 true
             Log.d("AudioDevice", "已设置音频输出为: " + getDeviceTypeName(selectedDevice.getType()));
         } else {
+            isAudioDeviceSet = false;  // 设置失败，标志位为 false
             Log.d("AudioDevice", "设置设备失败");
         }
     }
+
 
     // 释放 MediaPlayer 资源
     @Override

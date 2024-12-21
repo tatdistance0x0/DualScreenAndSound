@@ -26,7 +26,7 @@
         android:id="@+id/btn_presentation_selectfile"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/btn_selectfile" />
+        android:text="@string/btn_presentation_selectfile" />
 
 <!--    <Button-->
 <!--        android:id="@+id/btn_set_audio_device_type"-->
