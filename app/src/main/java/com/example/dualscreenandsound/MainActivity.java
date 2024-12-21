@@ -3,13 +3,18 @@ package com.example.dualscreenandsound;
 import android.Manifest;
 import android.app.Presentation;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.hardware.display.DisplayManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.Display;
 import android.view.Surface;
@@ -22,6 +27,10 @@ import android.widget.Spinner;
 import android.widget.Toast;
 import android.widget.VideoView;
 
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -29,6 +38,7 @@ import androidx.core.content.ContextCompat;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -45,19 +55,14 @@ public class MainActivity extends AppCompatActivity {
 
     private List<AudioDeviceInfo> OutputDevices;
     private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2;
+    private static final int REQUEST_CODE_SELECT_FILE = 1;
+    private String selectedFilePath, selectedPresentionFilePath = "";  // 用于保存选择的文件路径
+    private ActivityResultLauncher<Intent> selectFileLauncher, selectPresentationFileLauncher;  // 声明 ActivityResultLauncher
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        mediaPlayer = new MediaPlayer();
-//        mAudioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        try {
-            mediaPlayer.setDataSource("/sdcard/Music/Melody.mp4");  // 设置视频路径
-            mediaPlayer.prepare();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
 
         /********************
          添加音频路由设备的下拉列表
@@ -85,33 +90,39 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
                 AudioDeviceInfo selectedDevice = OutputDevices.get(position);
-                try {
-                    setAudioDevice(selectedDevice);  // 根据选择的设备设置音频输出
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                if (selectedFilePath != null && !selectedFilePath.isEmpty()) {
+                    try {
+                        setAudioDevice(selectedDevice);  // 根据选择的设备设置音频输出
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                } else {
+                    // 如果没有选择文件，做一些其他操作或提示用户选择文件
+                    Log.d("AudioDevice", "请选择文件");
                 }
             }
-
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
                 // 如果没有选择任何设备，可以执行一些默认操作
             }
         });
 
-
-
         // 监听 Spinner 的选择事件
         mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
                 AudioDeviceInfo selectedDevice = OutputDevices.get(position);
-                try {
-                    showSecondByDisplayManager(selectedDevice);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                if (selectedPresentionFilePath != null) {
+                    try {
+                        showSecondByDisplayManager(selectedDevice);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                } else {
+                    // 如果没有选择文件，做一些其他操作或提示用户选择文件
+                    Log.d("AudioDevice", "请选择文件");
                 }
             }
-
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
                 // 如果没有选择任何设备，可以执行一些默认操作
@@ -142,9 +153,7 @@ public class MainActivity extends AppCompatActivity {
                         // 如果没有播放，则开始播放
                         mediaPlayer.setDisplay(surfaceView.getHolder());  // 设置显示 SurfaceView
                         mediaPlayer.start();
-                        //                        mediaPlayer.start();
                         btn1.setText("暂停");
-
                     }
                 } else {
                     requestPermissions();
@@ -174,13 +183,116 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        Button selectFileButton = findViewById(R.id.btn_selectfile);
+        Button selectPrensentionFileButton = findViewById(R.id.btn_presentation_selectfile);
+        // 创建一个 ActivityResultLauncher 来替代 startActivityForResult
+        selectFileLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    Log.d("ActivityResult", "选择文件回调触发");
+                    if (result.getResultCode() == RESULT_OK) {
+                        Intent data = result.getData();
+                        if (data != null && data.getData() != null) {
+                            Uri selectedUri = data.getData();
+                            String filePath = getRealPathFromURI(selectedUri);
+                            if (filePath != null) {
+                                selectedFilePath = filePath;
+                                Log.d("SelectedFilePath", "文件路径为: " + selectedFilePath);
+                                Toast.makeText(MainActivity.this, "文件已选择: " + selectedFilePath, Toast.LENGTH_SHORT).show();
+                                initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
+                            } else {
+                                Log.d("SelectedFilePath", "无法获取文件路径");
+                            }
+                        }
+                    } else {
+                        Log.d("ActivityResult", "文件选择未成功");
+                    }
+                });
+// 创建一个 ActivityResultLauncher 来替代 startActivityForResult
+        selectPresentationFileLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    Log.d("ActivityResult", "选择文件回调触发");
+                    if (result.getResultCode() == RESULT_OK) {
+                        Intent data = result.getData();
+                        if (data != null && data.getData() != null) {
+                            Uri presentionselectedUri = data.getData();
+                            String presentionfilePath = getRealPathFromURI(presentionselectedUri);
+                            if (presentionfilePath != null) {
+                                selectedPresentionFilePath = presentionfilePath;
+                                Log.d("selectedPresentionFilePath", "文件路径为: " + selectedPresentionFilePath);
+                                Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
+                                presentation.initMediaPlayer(presentionselectedUri);  // 直接传递Uri给MediaPlayer
+                            } else {
+                                Log.d("selectedPresentionFilePath", "无法获取文件路径");
+                            }
+                        }
+                    } else {
+                        Log.d("ActivityResult", "文件选择未成功");
+                    }
+                });
+        // 按钮点击事件，打开文件选择器
+        selectFileButton.setOnClickListener(v -> openFileChooser());
+        selectPrensentionFileButton.setOnClickListener(v -> openFileChooser());
     }
+
+    // 初始化 MediaPlayer
+    private void initMediaPlayer(Uri fileUri) {
+        try {
+            // 创建 MediaPlayer 实例
+            mediaPlayer = new MediaPlayer();
+            // 设置数据源为本地视频文件的路径
+            mediaPlayer.setDataSource(this, fileUri);
+            // 准备播放器
+            mediaPlayer.prepare();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    // 打开文件选择器
+    private void openFileChooser() {
+        Log.d("ActivityResult", "正在打开文件选择器");
+        // 检查是否有文件读取权限
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+        } else {
+            // 启动文件选择器（选择音频或视频）
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*");  // 可以选择所有类型的文件，或者修改为"video/*"或"audio/*"
+            selectFileLauncher.launch(intent);  // 使用新的方式启动文件选择器
+        }
+    }
+    // 获取文件的绝对路径
+    private String getRealPathFromURI(Uri uri) {
+        String path = null;
+        if (uri.getScheme().equals("content")) {
+            // 如果URI是content类型，尝试使用ContentResolver获取文件路径
+            String[] projection = {MediaStore.Video.Media.DATA};
+            Cursor cursor = getContentResolver().query(uri, projection, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA);
+                path = cursor.getString(columnIndex);
+                cursor.close();
+            }
+        } else if (uri.getScheme().equals("file")) {
+            // 如果URI是file类型，直接获取文件路径
+            path = uri.getPath();
+        }
+
+        // 如果路径为空，尝试使用ContentResolver直接获取文件流
+        if (path == null) {
+            path = uri.toString();
+        }
+        return path;
+    }
+
+
 
     // 检查是否拥有读取存储的权限
     private boolean checkPermissions() {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
-
     // 请求权限
     private void requestPermissions() {
         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
@@ -212,16 +324,12 @@ public class MainActivity extends AppCompatActivity {
     }
     // 设置音频设备
     private void setAudioDevice(AudioDeviceInfo selectedDevice) throws IOException {
-//        mediaPlayer.reset();
-
         boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
         if (success) {
             Log.d("AudioDevice", "已设置音频输出为: " + getDeviceTypeName(selectedDevice.getType()));
         } else {
             Log.d("AudioDevice", "设置设备失败");
         }
-        // 准备和开始播放
-
     }
 
     // 释放 MediaPlayer 资源
@@ -257,7 +365,6 @@ public class MainActivity extends AppCompatActivity {
                 // 更新 presentation 内容并设置音频设备
                 presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设备
                 presentation.show();  // 显示 Presentation
-
                 Log.d("AudioDevice", "Updated existing presentation on second screen.");
             } else {
                 // 如果没有 presentation，创建新的 presentation 对象
@@ -269,7 +376,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
         } else {
-            Toast.makeText(this, "No external display found.", Toast.LENGTH_SHORT).show();
+            Log.d("AudioDevice", "displays NULL");
         }
     }
 

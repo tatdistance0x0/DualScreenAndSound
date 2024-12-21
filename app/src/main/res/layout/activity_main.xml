@@ -16,11 +16,17 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/presentation_displaymanager" />
-<!--    <Button-->
-<!--        android:id="@+id/btn_selectfile"-->
-<!--        android:layout_width="wrap_content"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:text="@string/btn_selectfile" />-->
+    <Button
+        android:id="@+id/btn_selectfile"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_selectfile" />
+
+    <Button
+        android:id="@+id/btn_presentation_selectfile"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_selectfile" />
 
 <!--    <Button-->
 <!--        android:id="@+id/btn_set_audio_device_type"-->

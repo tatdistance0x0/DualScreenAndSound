@@ -5,6 +5,7 @@ import android.content.Context;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.util.Log;
 import android.view.Display;
 import android.view.Surface;
@@ -63,7 +64,18 @@ public class MyPresentation extends Presentation {
             }
         });
     }
-
+    public void initMediaPlayer(Uri fileUri) {
+        try {
+            // 创建 MediaPlayer 实例
+            mediaPlayer = new MediaPlayer();
+            // 设置数据源为本地视频文件的路径
+            mediaPlayer.setDataSource(getContext(), fileUri);
+            // 准备播放器
+            mediaPlayer.prepare();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     // 设置视频路径并选择音频输出设备
     public void setVideoPathAndAudioDevice(AudioDeviceInfo selectedDevice) {
