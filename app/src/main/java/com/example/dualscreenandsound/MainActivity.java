@@ -34,7 +34,6 @@ import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-    private static final int PERMISSION_REQUEST_CODE = 1;
     private AudioManager mAudioManager;
     private MyPresentation presentation;  // 用来保存对 Presentation 的引用
     private boolean isVideoPlaying = false;  // 用来追踪视频是否正在播放
@@ -51,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-
+        initializePresentation();
         /********************
          添加音频路由设备的下拉列表
         *********************/
@@ -100,15 +99,16 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
                 AudioDeviceInfo selectedDevice = OutputDevices.get(position);
-                if (selectedPresentionFilePath != null) {
+                if (selectedPresentionFilePath != null && !selectedPresentionFilePath.isEmpty()) {
                     try {
+                        Log.d("AudioDevice", "开始设置副屏音频路由");
                         showSecondByDisplayManager(selectedDevice);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
                 } else {
                     // 如果没有选择文件，做一些其他操作或提示用户选择文件
-                    Log.d("AudioDevice", "请选择文件");
+                    Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
                 }
             }
             @Override
@@ -131,9 +131,6 @@ public class MainActivity extends AppCompatActivity {
         btn1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // 检查权限并执行播放或暂停操作
-//                if (checkPermissions()) {
-
                 if (mediaPlayer != null) {  // 检查 mediaPlayer 是否为 null
                     if (isAudioDeviceSet) {
                             if (mediaPlayer.isPlaying()) {
@@ -151,12 +148,8 @@ public class MainActivity extends AppCompatActivity {
                         }
                     } else {
                         // 如果 mediaPlayer 为 null，则提示或创建 mediaPlayer
-                        Toast.makeText(getApplicationContext(), "未选择文件", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
                     }
-//                } else {
-//                    requestPermissions();
-//                }
-
             }
         });
 
@@ -164,33 +157,34 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 // 检查 presentation 和 mediaPlayer 是否都已初始化
-                if (presentation != null) {
+                if (presentation.mediaPlayer != null) {
                     // 如果 presentation 已经初始化
                     Log.d("MainActivity", "presentation is initialized.");
-                    if (mediaPlayer != null) {
-                        // 如果 mediaPlayer 已初始化
-                        if (isVideoPlaying) {
-                            presentation.pauseVideo();  // 暂停视频
+                    if (presentation.isPrensentationAudioDeviceSet) {
+                        if (presentation.mediaPlayer.isPlaying()) {
+                            // 如果正在播放，则暂停
+                            presentation.mediaPlayer.pause();
                             btn2.setText("播放");
                         } else {
-                            presentation.playVideo();   // 播放视频
+                            // 如果没有播放，则开始播放
+                            presentation.mediaPlayer.setDisplay(presentation.surfaceView.getHolder());  // 设置显示 SurfaceView
+                            presentation.mediaPlayer.start();
                             btn2.setText("暂停");
                         }
-                        isVideoPlaying = !isVideoPlaying;  // 切换播放/暂停状态
                     } else {
                         // 如果 mediaPlayer 为 null，提示用户
-                        Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
                     }
                 } else {
                     // 如果 presentation 为 null，提示用户
-                    Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
                 }
             }
         });
 
         Button selectFileButton = findViewById(R.id.btn_selectfile);
         Button selectPrensentionFileButton = findViewById(R.id.btn_presentation_selectfile);
-        // 创建一个 ActivityResultLauncher 来替代 startActivityForResult
+//         创建一个 ActivityResultLauncher 来替代 startActivityForResult
         selectFileLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -217,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
         selectPresentationFileLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
-                    Log.d("ActivityResult", "选择文件回调触发");
+                    Log.d("ActivityResult", "111选择文件回调触发");
                     if (result.getResultCode() == RESULT_OK) {
                         Intent data = result.getData();
                         if (data != null && data.getData() != null) {
@@ -225,9 +219,9 @@ public class MainActivity extends AppCompatActivity {
                             String presentionfilePath = getRealPathFromURI(presentionselectedUri);
                             if (presentionfilePath != null) {
                                 selectedPresentionFilePath = presentionfilePath;
-                                Log.d("selectedPresentionFilePath", "文件路径为: " + selectedPresentionFilePath);
+                                Log.d("selectedPresentionFilePath", "111文件路径为: " + selectedPresentionFilePath);
                                 Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
-                                presentation.initMediaPlayer(presentionselectedUri);  // 直接传递Uri给MediaPlayer
+                                presentation.initPresentionMediaPlayer(presentionselectedUri);  // 直接传递Uri给MediaPlayer
                             } else {
                                 Log.d("selectedPresentionFilePath", "无法获取文件路径");
                             }
@@ -238,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
                 });
         // 按钮点击事件，打开文件选择器
         selectFileButton.setOnClickListener(v -> openFileChooser());
-        selectPrensentionFileButton.setOnClickListener(v -> openFileChooser());
+        selectPrensentionFileButton.setOnClickListener(v -> openPresentationFileChooser());
     }
 
     // 初始化 MediaPlayer
@@ -246,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             // 创建 MediaPlayer 实例
             mediaPlayer = new MediaPlayer();
+            Log.d("MediaPlayer", "主屏URI: " + fileUri.toString());
             // 设置数据源为本地视频文件的路径
             mediaPlayer.setDataSource(this, fileUri);
             // 准备播放器
@@ -268,6 +263,22 @@ public class MainActivity extends AppCompatActivity {
             selectFileLauncher.launch(intent);  // 使用新的方式启动文件选择器
         }
     }
+
+    private void openPresentationFileChooser() {
+        Log.d("ActivityResult", "正在打开文件选择器");
+        // 检查是否有文件读取权限
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+        } else {
+            // 启动文件选择器（选择音频或视频）
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*");  // 可以选择所有类型的文件，或者修改为"video/*"或"audio/*"
+            selectPresentationFileLauncher.launch(intent);  // 使用新的方式启动文件选择器
+        }
+    }
+
+
     // 获取文件的绝对路径
     private String getRealPathFromURI(Uri uri) {
         String path = null;
@@ -293,15 +304,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
-    // 检查是否拥有读取存储的权限
-    private boolean checkPermissions() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
-    }
-    // 请求权限
-    private void requestPermissions() {
-        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
-    }
     // 根据设备类型返回可读的设备名称
     public String getDeviceTypeName(int deviceType) {
         switch (deviceType) {
@@ -362,30 +364,28 @@ public class MainActivity extends AppCompatActivity {
             displayVideoOnSecondScreen(selectedDevice);
         }
     }
-    private void displayVideoOnSecondScreen(AudioDeviceInfo selectedDevice) {
+
+    private void initializePresentation() {
         DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         Display[] displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
 
         if (displays != null && displays.length > 0) {
             Display display = displays[displays.length - 1];  // 选择最后一个显示设备
             // 如果已经有 presentation，则更新其内容
+            // 如果没有 presentation，创建新的 presentation 对象
             if (presentation != null) {
                 // 更新 presentation 内容并设置音频设备
-                presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设备
-                presentation.show();  // 显示 Presentation
                 Log.d("AudioDevice", "Updated existing presentation on second screen.");
             } else {
                 // 如果没有 presentation，创建新的 presentation 对象
                 presentation = new MyPresentation(this, display);
-                presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设备
-                presentation.show();  // 显示 Presentation
-
+                presentation.show();
                 Log.d("AudioDevice", "Created new presentation on second screen.");
             }
-
-        } else {
-            Log.d("AudioDevice", "displays NULL");
         }
+    }
+    private void displayVideoOnSecondScreen(AudioDeviceInfo selectedDevice) {
+        presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设
     }
 
 
