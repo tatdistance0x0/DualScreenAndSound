@@ -45,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
     private String selectedPresentionFilePath = "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectPresentationFileLauncher;  // 声明 ActivityResultLauncher
+    private Uri selectedUri, presentionselectedUri;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -181,7 +182,9 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-
+        /********************
+         添加主副屏视频文件选择按钮
+         *********************/
         Button selectFileButton = findViewById(R.id.btn_selectfile);
         Button selectPrensentionFileButton = findViewById(R.id.btn_presentation_selectfile);
 //         创建一个 ActivityResultLauncher 来替代 startActivityForResult
@@ -192,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
                     if (result.getResultCode() == RESULT_OK) {
                         Intent data = result.getData();
                         if (data != null && data.getData() != null) {
-                            Uri selectedUri = data.getData();
+                            selectedUri = data.getData();
                             String filePath = getRealPathFromURI(selectedUri);
                             if (filePath != null) {
                                 selectedFilePath = filePath;
@@ -215,13 +218,15 @@ public class MainActivity extends AppCompatActivity {
                     if (result.getResultCode() == RESULT_OK) {
                         Intent data = result.getData();
                         if (data != null && data.getData() != null) {
-                            Uri presentionselectedUri = data.getData();
+                            presentionselectedUri = data.getData();
                             String presentionfilePath = getRealPathFromURI(presentionselectedUri);
                             if (presentionfilePath != null) {
                                 selectedPresentionFilePath = presentionfilePath;
                                 Log.d("selectedPresentionFilePath", "111文件路径为: " + selectedPresentionFilePath);
                                 Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
                                 presentation.initPresentionMediaPlayer(presentionselectedUri);  // 直接传递Uri给MediaPlayer
+                                initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
+                                Log.d("MediaPlayer", "主屏 MediaPlayer 初始化：" + (mediaPlayer == null ? "空" : "已初始化"));
                             } else {
                                 Log.d("selectedPresentionFilePath", "无法获取文件路径");
                             }
@@ -238,8 +243,11 @@ public class MainActivity extends AppCompatActivity {
     // 初始化 MediaPlayer
     private void initMediaPlayer(Uri fileUri) {
         try {
+            if (mediaPlayer == null) {
+                mediaPlayer = new MediaPlayer();
+            }
             // 创建 MediaPlayer 实例
-            mediaPlayer = new MediaPlayer();
+//            mediaPlayer = new MediaPlayer();
             Log.d("MediaPlayer", "主屏URI: " + fileUri.toString());
             // 设置数据源为本地视频文件的路径
             mediaPlayer.setDataSource(this, fileUri);
@@ -347,8 +355,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         if (mediaPlayer != null) {
-            mediaPlayer.release();
-            mediaPlayer = null;
+            mediaPlayer.release();  // 在停止时释放资源
+            mediaPlayer = null;  // 清空引用
         }
     }
 
@@ -374,7 +382,6 @@ public class MainActivity extends AppCompatActivity {
             // 如果已经有 presentation，则更新其内容
             // 如果没有 presentation，创建新的 presentation 对象
             if (presentation != null) {
-                // 更新 presentation 内容并设置音频设备
                 Log.d("AudioDevice", "Updated existing presentation on second screen.");
             } else {
                 // 如果没有 presentation，创建新的 presentation 对象
