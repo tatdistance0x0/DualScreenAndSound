@@ -29,6 +29,11 @@ public class MyPresentation extends Presentation {
     }
     public void initPresentionMediaPlayer(Uri fileUri) {
         try {
+            if (mediaPlayer != null) {
+                mediaPlayer.reset();  // 重置之前的 MediaPlayer
+                mediaPlayer.release();  // 释放资源
+                mediaPlayer = null;  // 设置为 null，避免引用
+            }
             // 创建 MediaPlayer 实例
             mediaPlayer = new MediaPlayer();
             Log.d("MediaPlayer", "副屏 URI: " + fileUri.toString());
