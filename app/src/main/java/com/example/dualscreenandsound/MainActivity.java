@@ -11,6 +11,8 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Display;
@@ -46,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectPresentationFileLauncher;  // 声明 ActivityResultLauncher
     private Uri selectedUri, presentionselectedUri;
+    private boolean wasPresentationPlaying,wasMediaPlayerPlaying = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -78,17 +81,39 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
                 AudioDeviceInfo selectedDevice = OutputDevices.get(position);
-                if (selectedFilePath != null  && !selectedFilePath.isEmpty()) {
-                    try {
-                        setAudioDevice(selectedDevice);  // 根据选择的设备设置音频输出
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+
+                if (selectedFilePath != null && !selectedFilePath.isEmpty()) {
+                    // 判断 mediaPlayer 是否在播放
+                    if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                        wasMediaPlayerPlaying = true;  // 记录原来的播放状态
+                        mediaPlayer.pause();  // 如果正在播放，暂停
                     }
+                    // 设置音频设备
+                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                setAudioDevice(selectedDevice);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                            if (mediaPlayer != null) {
+                                if (wasMediaPlayerPlaying) {
+                                    // 如果之前是播放状态，恢复播放
+                                    mediaPlayer.start();
+                                }
+                                // 如果之前是暂停状态，保持暂停状态
+                            }
+                        }
+                    }, 500);  // 延迟 0.5 秒 (500 毫秒)
+
                 } else {
                     // 如果没有选择文件，做一些其他操作或提示用户选择文件
                     Log.d("AudioDevice", "请选择文件");
                 }
+
             }
+
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
                 // 如果没有选择任何设备，可以执行一些默认操作
@@ -100,18 +125,43 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
                 AudioDeviceInfo selectedDevice = OutputDevices.get(position);
+
                 if (selectedPresentionFilePath != null && !selectedPresentionFilePath.isEmpty()) {
-                    try {
-                        Log.d("AudioDevice", "开始设置副屏音频路由");
-                        showSecondByDisplayManager(selectedDevice);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+
+                    // 判断 mediaPlayer 是否在播放
+                    if (presentation.mediaPlayer != null && presentation.mediaPlayer.isPlaying()) {
+                        wasPresentationPlaying = true;  // 记录原来的播放状态
+                        presentation.mediaPlayer.pause();  // 如果正在播放，暂停
                     }
+                    // 使用 Handler 来延迟恢复播放
+                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                showSecondByDisplayManager(selectedDevice);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                            // 设置完设备后，恢复原来的播放状态
+                            if (presentation.mediaPlayer != null) {
+                                if (wasPresentationPlaying) {
+                                    // 如果之前是播放状态，恢复播放
+                                    presentation.mediaPlayer.setDisplay(presentation.surfaceView.getHolder());  // 设置显示 SurfaceView
+                                    presentation.mediaPlayer.start();
+                                }
+                                // 如果之前已经暂停，保持暂停状态，不做处理
+                            }
+                        }
+                    }, 500);  // 延迟 0.5 秒 (500 毫秒)
+
+
                 } else {
                     // 如果没有选择文件，做一些其他操作或提示用户选择文件
-                    Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
+                    Log.d("AudioDevice", "请选择文件");
                 }
+
             }
+
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
                 // 如果没有选择任何设备，可以执行一些默认操作
@@ -138,11 +188,13 @@ public class MainActivity extends AppCompatActivity {
                                 // 如果正在播放，则暂停
                                 mediaPlayer.pause();
                                 btn1.setText("播放");
+                                wasMediaPlayerPlaying = false;  // 记录原来的播放状态
                             } else {
                                 // 如果没有播放，则开始播放
                                 mediaPlayer.setDisplay(surfaceView.getHolder());  // 设置显示 SurfaceView
                                 mediaPlayer.start();
                                 btn1.setText("暂停");
+//                                wasMediaPlayerPlaying = true;  // 记录原来的播放状态
                             }
                         }else{
                             Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
@@ -166,11 +218,13 @@ public class MainActivity extends AppCompatActivity {
                             // 如果正在播放，则暂停
                             presentation.mediaPlayer.pause();
                             btn2.setText("播放");
+                            wasPresentationPlaying = false;  // 记录原来的播放状态
                         } else {
                             // 如果没有播放，则开始播放
                             presentation.mediaPlayer.setDisplay(presentation.surfaceView.getHolder());  // 设置显示 SurfaceView
                             presentation.mediaPlayer.start();
                             btn2.setText("暂停");
+//                            wasPresentationPlaying = true;  // 记录原来的播放状态
                         }
                     } else {
                         // 如果 mediaPlayer 为 null，提示用户
@@ -389,7 +443,10 @@ public class MainActivity extends AppCompatActivity {
                 presentation.show();
                 Log.d("AudioDevice", "Created new presentation on second screen.");
             }
+        }else{
+            Log.d("AudioDevice", "displays = NULL");
         }
+
     }
     private void displayVideoOnSecondScreen(AudioDeviceInfo selectedDevice) {
         presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设
