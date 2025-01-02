@@ -49,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> selectFileLauncher, selectPresentationFileLauncher;  // 声明 ActivityResultLauncher
     private Uri selectedUri, presentionselectedUri;
     private boolean wasPresentationPlaying,wasMediaPlayerPlaying = false;
+    private AudioDeviceInfo selectedDevice;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -70,6 +71,9 @@ public class MainActivity extends AppCompatActivity {
             deviceNames.add(deviceTypeName);
         }
 
+        /********************
+         添加主副屏音频通道切换下拉列表
+         *********************/
         // 设置 Spinner 的适配器
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, deviceNames);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -80,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
         mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                AudioDeviceInfo selectedDevice = OutputDevices.get(position);
+                selectedDevice = OutputDevices.get(position);
 
                 if (selectedFilePath != null && !selectedFilePath.isEmpty()) {
                     // 判断 mediaPlayer 是否在播放
@@ -124,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
         mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                AudioDeviceInfo selectedDevice = OutputDevices.get(position);
+                selectedDevice = OutputDevices.get(position);
 
                 if (selectedPresentionFilePath != null && !selectedPresentionFilePath.isEmpty()) {
 
@@ -194,7 +198,6 @@ public class MainActivity extends AppCompatActivity {
                                 mediaPlayer.setDisplay(surfaceView.getHolder());  // 设置显示 SurfaceView
                                 mediaPlayer.start();
                                 btn1.setText("暂停");
-//                                wasMediaPlayerPlaying = true;  // 记录原来的播放状态
                             }
                         }else{
                             Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
@@ -224,7 +227,6 @@ public class MainActivity extends AppCompatActivity {
                             presentation.mediaPlayer.setDisplay(presentation.surfaceView.getHolder());  // 设置显示 SurfaceView
                             presentation.mediaPlayer.start();
                             btn2.setText("暂停");
-//                            wasPresentationPlaying = true;  // 记录原来的播放状态
                         }
                     } else {
                         // 如果 mediaPlayer 为 null，提示用户
@@ -256,6 +258,11 @@ public class MainActivity extends AppCompatActivity {
                                 Log.d("SelectedFilePath", "文件路径为: " + selectedFilePath);
                                 Toast.makeText(MainActivity.this, "文件已选择: " + selectedFilePath, Toast.LENGTH_SHORT).show();
                                 initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
+                                try {
+                                    setAudioDevice(selectedDevice);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
                             } else {
                                 Log.d("SelectedFilePath", "无法获取文件路径");
                             }
@@ -279,8 +286,13 @@ public class MainActivity extends AppCompatActivity {
                                 Log.d("selectedPresentionFilePath", "111文件路径为: " + selectedPresentionFilePath);
                                 Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
                                 presentation.initPresentionMediaPlayer(presentionselectedUri);  // 直接传递Uri给MediaPlayer
-                                initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
+//                                initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
                                 Log.d("MediaPlayer", "主屏 MediaPlayer 初始化：" + (mediaPlayer == null ? "空" : "已初始化"));
+                                try {
+                                    showSecondByDisplayManager(selectedDevice);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
                             } else {
                                 Log.d("selectedPresentionFilePath", "无法获取文件路径");
                             }
