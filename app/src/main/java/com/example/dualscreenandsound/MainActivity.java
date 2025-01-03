@@ -16,6 +16,8 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Display;
+import android.view.Surface;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.widget.AdapterView;
@@ -49,13 +51,56 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> selectFileLauncher, selectPresentationFileLauncher;  // 声明 ActivityResultLauncher
     private Uri selectedUri, presentionselectedUri;
     private boolean wasPresentationPlaying,wasMediaPlayerPlaying = false;
-    private AudioDeviceInfo selectedDevice;
+    private AudioDeviceInfo selectedDevice,selectedPresentationDevice;
+    private boolean isSelectingPresentation = false;
+    private long currentPosition = 0;  // 用来保存当前播放的位置
+    private SurfaceHolder surfaceHolder;
+    private Surface surface;
+    private boolean shouldRestorePlaybackState = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         initializePresentation();
+        surfaceView = findViewById(R.id.surfaceView);  // SurfaceView 用于显示视频
+        surface = surfaceView.getHolder().getSurface();
+        surfaceHolder = surfaceView.getHolder();
+        // SurfaceHolder.Callback 用来处理 Surface 创建和销毁
+        surfaceHolder.addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                // Surface 创建后，可以初始化播放器
+                if (selectedUri != null) {
+                    initMediaPlayer(selectedUri, holder.getSurface());
+                    try {
+                        setAudioDevice(selectedDevice);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                // 处理Surface变化
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                if (shouldRestorePlaybackState) {
+                    Log.d("MediaPlayer", "准备获取当前播放位置");
+                    // 在Surface销毁时保存当前播放状态
+                    savePlaybackState();
+                }
+
+                // 在 Surface 销毁时释放播放器资源
+                releaseMediaPlayer();
+            }
+        });
+
+
         /********************
          添加音频路由设备的下拉列表
         *********************/
@@ -128,7 +173,7 @@ public class MainActivity extends AppCompatActivity {
         mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                selectedDevice = OutputDevices.get(position);
+                selectedPresentationDevice = OutputDevices.get(position);
 
                 if (selectedPresentionFilePath != null && !selectedPresentionFilePath.isEmpty()) {
 
@@ -142,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
                         @Override
                         public void run() {
                             try {
-                                showSecondByDisplayManager(selectedDevice);
+                                showSecondByDisplayManager(selectedPresentationDevice);
                             } catch (IOException e) {
                                 throw new RuntimeException(e);
                             }
@@ -172,8 +217,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        surfaceView = findViewById(R.id.surfaceView);  // SurfaceView 用于显示视频
-        surfaceView.getHolder().getSurface();
+
 
         /********************
          添加主副屏视频播放的按钮
@@ -257,12 +301,12 @@ public class MainActivity extends AppCompatActivity {
                                 selectedFilePath = filePath;
                                 Log.d("SelectedFilePath", "文件路径为: " + selectedFilePath);
                                 Toast.makeText(MainActivity.this, "文件已选择: " + selectedFilePath, Toast.LENGTH_SHORT).show();
-                                initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
-                                try {
-                                    setAudioDevice(selectedDevice);
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
+//                                initMediaPlayer(selectedUri,  surfaceHolder.getSurface());  // 直接传递Uri给MediaPlayer
+//                                try {
+//                                    setAudioDevice(selectedDevice);
+//                                } catch (IOException e) {
+//                                    throw new RuntimeException(e);
+//                                }
                             } else {
                                 Log.d("SelectedFilePath", "无法获取文件路径");
                             }
@@ -285,14 +329,16 @@ public class MainActivity extends AppCompatActivity {
                                 selectedPresentionFilePath = presentionfilePath;
                                 Log.d("selectedPresentionFilePath", "111文件路径为: " + selectedPresentionFilePath);
                                 Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
+
                                 presentation.initPresentionMediaPlayer(presentionselectedUri);  // 直接传递Uri给MediaPlayer
 //                                initMediaPlayer(selectedUri);  // 直接传递Uri给MediaPlayer
                                 Log.d("MediaPlayer", "主屏 MediaPlayer 初始化：" + (mediaPlayer == null ? "空" : "已初始化"));
                                 try {
-                                    showSecondByDisplayManager(selectedDevice);
+                                    showSecondByDisplayManager(selectedPresentationDevice);
                                 } catch (IOException e) {
                                     throw new RuntimeException(e);
                                 }
+
                             } else {
                                 Log.d("selectedPresentionFilePath", "无法获取文件路径");
                             }
@@ -301,26 +347,78 @@ public class MainActivity extends AppCompatActivity {
                         Log.d("ActivityResult", "文件选择未成功");
                     }
                 });
+
         // 按钮点击事件，打开文件选择器
-        selectFileButton.setOnClickListener(v -> openFileChooser());
-        selectPrensentionFileButton.setOnClickListener(v -> openPresentationFileChooser());
+        selectFileButton.setOnClickListener(v ->{
+            shouldRestorePlaybackState = false;
+            openFileChooser();
+        });
+        selectPrensentionFileButton.setOnClickListener(v -> {
+            shouldRestorePlaybackState = true;
+            openPresentationFileChooser();
+        });
+
     }
 
     // 初始化 MediaPlayer
-    private void initMediaPlayer(Uri fileUri) {
+    private void initMediaPlayer(Uri fileUri, Surface surface) {
         try {
             if (mediaPlayer == null) {
                 mediaPlayer = new MediaPlayer();
+                Log.d("MediaPlayer", "MediaPlayer 被初始化");
+            } else {
+                Log.d("MediaPlayer", "MediaPlayer 重置");
+                mediaPlayer.reset(); // 重置MediaPlayer
             }
-            // 创建 MediaPlayer 实例
-//            mediaPlayer = new MediaPlayer();
             Log.d("MediaPlayer", "主屏URI: " + fileUri.toString());
             // 设置数据源为本地视频文件的路径
             mediaPlayer.setDataSource(this, fileUri);
-            // 准备播放器
-            mediaPlayer.prepare();
+            mediaPlayer.setSurface(surface);  // 绑定Surface
+            mediaPlayer.setOnPreparedListener(mp -> {
+                Log.d("MediaPlayer", "播放器准备完毕");
+                // 恢复播放状态
+                if (shouldRestorePlaybackState) {
+                    Log.d("MediaPlayer", "准备恢复restorePlaybackState");
+                    restorePlaybackState();
+                }
+            });
+            mediaPlayer.prepareAsync(); // 异步准备播放
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void releaseMediaPlayer() {
+        if (mediaPlayer != null) {
+            mediaPlayer.stop();
+            mediaPlayer.release();
+            mediaPlayer = null;
+            Log.d("MediaPlayer", "MediaPlayer 被释放");
+        }
+    }
+    private void savePlaybackState() {
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            isVideoPlaying = true;
+            Log.d("MediaPlayer", "尝试获取当前播放位置");
+            currentPosition = mediaPlayer.getCurrentPosition(); // 获取当前播放位置
+        } else {
+            Log.d("MediaPlayer", "未去获取当前播放位置");
+            isVideoPlaying = false;
+        }
+    }
+
+    private void restorePlaybackState() {
+        if (mediaPlayer != null) {
+            try {
+                Log.d("MediaPlayer", "尝试恢复restorePlaybackState");
+                mediaPlayer.seekTo((int) currentPosition);  // 恢复播放进度
+                if (isVideoPlaying) {
+                    mediaPlayer.start();  // 恢复播放
+                }
+            } catch (IllegalStateException e) {
+                // 处理可能的错误
+                e.printStackTrace();
+            }
         }
     }
     // 打开文件选择器
@@ -331,6 +429,7 @@ public class MainActivity extends AppCompatActivity {
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
         } else {
+
             // 启动文件选择器（选择音频或视频）
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
             intent.setType("*/*");  // 可以选择所有类型的文件，或者修改为"video/*"或"audio/*"
@@ -415,27 +514,33 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
-    // 释放 MediaPlayer 资源
-    @Override
     protected void onPause() {
         super.onPause();
+        // 暂停视频播放
         if (mediaPlayer != null) {
-            mediaPlayer.release();  // 在停止时释放资源
-            mediaPlayer = null;  // 清空引用
+//            mediaPlayer.pause();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 恢复视频播放
+        if (mediaPlayer != null) {
+//            mediaPlayer.start();
         }
     }
 
 //
     private static final int REQUEST_CODE_STORAGE_PERMISSION = 1001;
-    private void showSecondByDisplayManager(AudioDeviceInfo selectedDevice) throws IOException {
+    private void showSecondByDisplayManager(AudioDeviceInfo selectedPresentationDevice) throws IOException {
         // 检查存储权限
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             // 如果没有权限，请求权限
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE_STORAGE_PERMISSION);
         }else {
             // 权限已授予，继续执行展示视频
-            displayVideoOnSecondScreen(selectedDevice);
+            displayVideoOnSecondScreen(selectedPresentationDevice);
         }
     }
 
@@ -460,8 +565,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
     }
-    private void displayVideoOnSecondScreen(AudioDeviceInfo selectedDevice) {
-        presentation.setVideoPathAndAudioDevice(selectedDevice);  // 设置视频路径和音频设
+    private void displayVideoOnSecondScreen(AudioDeviceInfo selectedPresentationDevice) {
+        presentation.setVideoPathAndAudioDevice(selectedPresentationDevice);  // 设置视频路径和音频设
     }
 
 
