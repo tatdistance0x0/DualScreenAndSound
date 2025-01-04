@@ -51,9 +51,12 @@ public class MainActivity extends AppCompatActivity {
     private String selectedFilePath = "";  // 用于保存选择的文件路径
     private String selectedPresentionFilePath = "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
-    private ActivityResultLauncher<Intent> selectFileLauncher;  // 声明 ActivityResultLauncher
-    private Uri selectedUri, presentionselectedUri,toggleSelectedUri;
-    private AudioDeviceInfo selectedDevice;
+    private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
+    private Uri selectedUri;
+    public static Uri presentionselectedUri;
+    private Uri toggleSelectedUri;
+    private AudioDeviceInfo selectedDevice ;
+    public static AudioDeviceInfo selectedDeviceCache;
     private long currentPosition = 0;  // 用来保存当前播放的位置
     private SurfaceHolder surfaceHolder;
     private Surface surface;
@@ -120,45 +123,7 @@ public class MainActivity extends AppCompatActivity {
         mAudioDevicesSpinner1 = findViewById(R.id.spinner_audio_devices);
         mAudioDevicesSpinner2 = findViewById(R.id.spinner_audio_presentation_devices);
 
-        // 获取所有音频输出设备
-        OutputDevices = Arrays.asList(mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
-        // 获取设备类型并转换为可显示的名称
-        List<String> deviceNames = new ArrayList<>();
-        for (AudioDeviceInfo device : OutputDevices) {
-            String deviceTypeName = getDeviceTypeName(device.getType());
-            deviceNames.add(deviceTypeName);
-        }
-
-        /********************
-         添加主副屏音频通道切换下拉列表
-         *********************/
-        // 设置 Spinner 的适配器
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, deviceNames);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        mAudioDevicesSpinner1.setAdapter(adapter);
-        mAudioDevicesSpinner2.setAdapter(adapter);
-        mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                handleAudioDeviceSelection(parentView, selectedItemView, position, id, false);  // false 表示处理的是普通的 AudioDevice
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parentView) {
-                // 如果没有选择任何设备，可以执行一些默认操作
-            }
-        });
-
-        mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                handleAudioDeviceSelection(parentView, selectedItemView, position, id, true);  // true 表示处理的是 Presentation
-            }
-            @Override
-            public void onNothingSelected(AdapterView<?> parentView) {
-                // 如果没有选择任何设备，可以执行一些默认操作
-            }
-        });
+        refreshAudioDeviceList();
 
         /********************
          添加主副屏视频播放的按钮
@@ -189,20 +154,42 @@ public class MainActivity extends AppCompatActivity {
         /********************
          添加主副屏视频文件选择按钮
          *********************/
-        // 按钮点击事件，打开文件选择器
-        Button selectFileButton = findViewById(R.id.btn_selectfile);
-        Button selectPrensentionFileButton = findViewById(R.id.btn_presentation_selectfile);
-        selectFileButton.setOnClickListener(v -> handleFileSelection(selectFileLauncher, false));
-        selectPrensentionFileButton.setOnClickListener(v -> handleFileSelection(presentation.selectFileLauncher, true));
-
         // 创建一个 ActivityResultLauncher 来替代 startActivityForResult
         selectFileLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> handleFileResult(result, false));
 
-        presentation.selectFileLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> handleFileResult(result, true));
+        // 确保 presentation.selectFileLauncher 被初始化
+//        if (presentation != null) {
+            if (selectFileLauncherCache == null) {
+                selectFileLauncherCache = registerForActivityResult(
+                        new ActivityResultContracts.StartActivityForResult(),
+                        result -> handleFileResult(result, true));
+                Log.d("AudioDevice", "注册presentation.selectFileLauncher");
+            }else{
+                Log.d("AudioDevice", "presentation.selectFileLauncher为空");
+            }
+//            selectFileLauncherCache =  presentation.selectFileLauncher;
+//        }else{
+//            Log.d("AudioDevice", "presentation为空");
+//        }
+
+        // 缓存 selectFileLauncher，防止presentation被释放的时候presentation.selectFileLauncher与registerForActivityResult失去关系
+
+        // 按钮点击事件，打开文件选择器
+        Button selectFileButton = findViewById(R.id.btn_selectfile);
+        Button selectPrensentionFileButton = findViewById(R.id.btn_presentation_selectfile);
+        selectFileButton.setOnClickListener(v -> handleFileSelection(selectFileLauncher, false));
+        selectPrensentionFileButton.setOnClickListener(v ->{
+                if(presentation != null){
+                    handleFileSelection(selectFileLauncherCache, true);
+                }else{
+                    Toast.makeText(getApplicationContext(), "请连接副屏", Toast.LENGTH_SHORT).show();
+                    Log.d("AudioDevice", "presentation为null");
+                }
+        });
+
+
     }
 
     // 用于处理播放和暂停的通用方法
@@ -243,6 +230,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         presentation.selectedDevice = (AudioDeviceInfo) device;
+        selectedDeviceCache = presentation.selectedDevice;
         if (selectedPresentionFilePath == null || selectedPresentionFilePath.isEmpty()) {
             Log.d("AudioDevice", "请选择文件");
             return;
@@ -251,8 +239,9 @@ public class MainActivity extends AppCompatActivity {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                presentation.setAudioDevice(presentation.selectedDevice);
-                resumeMediaPlayerIfPlaying(presentation.mediaPlayer);  // 恢复播放
+                Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
+                presentation.setAudioDevice(selectedDeviceCache);
+//                resumeMediaPlayerIfPlaying(presentation.mediaPlayer);  // 恢复播放
             }
         }, 500);  // 延迟 0.5 秒
     }
@@ -269,18 +258,22 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 setAudioDevice(selectedDevice);
-                resumeMediaPlayerIfPlaying(mediaPlayer);  // 恢复播放
+//                resumeMediaPlayerIfPlaying(mediaPlayer);  // 恢复播放
             }
         }, 500);  // 延迟 0.5 秒
     }
 
     //打开文件管理器的通用方法
     private void handleFileSelection(ActivityResultLauncher<Intent> launcher, boolean isPresentation) {
-        launcher.launch(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*"));
+        if (launcher != null) {
+            launcher.launch(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*"));
+        } else {
+            Log.e("MainActivity", "ActivityResultLauncher is null");
+        }
     }
 
     // 处理文件选择结果的通用方法
-    private void handleFileResult(ActivityResult result, boolean isPresentation) {
+    public void handleFileResult(ActivityResult result, boolean isPresentation) {
         Log.d("ActivityResult", "选择文件回调触发");
 
         if (result.getResultCode() == RESULT_OK) {
@@ -387,22 +380,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-    // 打开文件选择器
-    private void openFileChooser() {
-        Log.d("ActivityResult", "正在打开文件选择器");
-        // 检查是否有文件读取权限
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
-        } else {
-
-            // 启动文件选择器（选择音频或视频）
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("*/*");  // 可以选择所有类型的文件，或者修改为"video/*"或"audio/*"
-            selectFileLauncher.launch(intent);  // 使用新的方式启动文件选择器
-        }
-    }
-
 
 
     // 获取文件的绝对路径
@@ -450,6 +427,9 @@ public class MainActivity extends AppCompatActivity {
                 // 副屏添加时重新初始化 presentation
                 Log.d("AudioDevice", "Display added: " + displayId);
                 initializePresentation();
+                // 刷新音频设备列表
+                Log.d("AudioDevice", "onDisplayAdded刷新音频设备列表");
+                refreshAudioDeviceList();
             }
             @Override
             public void onDisplayChanged(int displayId) {
@@ -462,9 +442,21 @@ public class MainActivity extends AppCompatActivity {
                 // 副屏移除时，隐藏或销毁 presentation
                 if (presentation != null && presentation.getDisplay().getDisplayId() == displayId) {
                     Log.d("AudioDevice", "Display removed: " + displayId);
+                    if (presentation.surface != null ) {
+                        Log.d("MediaPlayer", "释放 surface");
+                        if (presentation.mediaPlayer != null && presentation.mediaPlayer.isPlaying()) {
+                            presentation.mediaPlayer.pause();
+                            Log.d("MediaPlayer", "暂停 surface");
+                        }
+                        presentation.releaseMediaPlayer();
+                    }
                     presentation.dismiss();
                     presentation = null;
                 }
+
+                // 刷新音频设备列表
+                Log.d("AudioDevice", "onDisplayRemoved刷新音频设备列表");
+                refreshAudioDeviceList();
             }
         }, null);
     }
@@ -514,6 +506,52 @@ public class MainActivity extends AppCompatActivity {
             default:
                 return "未知设备类型";
         }
+    }
+
+
+    private void refreshAudioDeviceList() {
+        // 获取所有音频输出设备
+        OutputDevices = Arrays.asList(mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
+
+        // 获取设备类型并转换为可显示的名称
+        List<String> deviceNames = new ArrayList<>();
+        for (AudioDeviceInfo device : OutputDevices) {
+            String deviceTypeName = getDeviceTypeName(device.getType());
+            deviceNames.add(deviceTypeName);
+        }
+
+        // 刷新 Spinner 适配器
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, deviceNames);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        // 设置新适配器到 Spinner1 和 Spinner2
+        mAudioDevicesSpinner1.setAdapter(adapter);
+        mAudioDevicesSpinner2.setAdapter(adapter);
+
+        // 重新设置 Spinner 的监听器（如果需要）
+        mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
+                handleAudioDeviceSelection(parentView, selectedItemView, position, id, false);  // false 表示处理的是普通的 AudioDevice
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parentView) {
+                // 如果没有选择任何设备，可以执行一些默认操作
+            }
+        });
+
+        mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
+                handleAudioDeviceSelection(parentView, selectedItemView, position, id, true);  // true 表示处理的是 Presentation
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parentView) {
+                // 如果没有选择任何设备，可以执行一些默认操作
+            }
+        });
     }
     @Override
     public void onStop() {

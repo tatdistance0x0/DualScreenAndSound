@@ -15,6 +15,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -30,14 +31,53 @@ public class MyPresentation extends Presentation {
     public boolean isVideoPlaying  = false;
     public long currentPosition  = 0;
     public ActivityResultLauncher<Intent> selectFileLauncher;
+
     public AudioDeviceInfo selectedDevice;
+    private SurfaceHolder surfaceHolder;
     public MyPresentation(Context context, Display display) {
         super(context, display);
         setContentView(R.layout.presentation);  // 这里你可以定义布局文件，包含一个 SurfaceView
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         surfaceView = findViewById(R.id.surface_view); // 获取 SurfaceView
         surface = surfaceView.getHolder().getSurface();
+        surfaceHolder = surfaceView.getHolder();
+        Log.d("MediaPlayer", "获取一个新的 Surface");
+        // SurfaceHolder.Callback 用来处理 Surface 创建和销毁
+        surfaceHolder.addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                Log.d("MediaPlayer", "surfaceCreated");
+                // Surface 创建后，可以初始化播放器
+                if (MainActivity.presentionselectedUri != null) {
+                    initMediaPlayer(MainActivity.presentionselectedUri, surface);  // 直接传递Uri给MediaPlayer
+
+                }
+//                selectedDevice = MainActivity.selectedDeviceCache;
+//                if(selectedDevice!= null){
+//                    setAudioDevice(selectedDevice);
+//                }else{
+//                    Log.d("MediaPlayer", "selectedDevice is null");
+//                }
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                Log.d("MediaPlayer", "surfaceChanged");
+                // 处理Surface变化
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                Log.d("MediaPlayer", "surfaceDestroyed");
+                // 在 Surface 销毁时释放播放器资源
+                if (mediaPlayer != null ) {
+                    releaseMediaPlayer(); // 释放资源
+                }
+
+            }
+        });
     }
+
 
     // 初始化 MediaPlayer
     public void initMediaPlayer(Uri fileUri,Surface surface) {
@@ -97,6 +137,7 @@ public class MyPresentation extends Presentation {
                 mediaPlayer.seekTo((int) currentPosition);  // 恢复播放进度
                 if (isVideoPlaying) {
                     mediaPlayer.start();  // 恢复播放
+                    Log.d("MediaPlayer", "恢复播放Presention");
                 }
             } catch (IllegalStateException e) {
                 // 处理可能的错误
@@ -105,24 +146,11 @@ public class MyPresentation extends Presentation {
         }
     }
 
-    // 打开文件选择器
-    public void openFileChooser() {
-        Log.d("ActivityResult", "正在打开文件选择器");
-        // 检查是否有文件读取权限
-        if (ContextCompat.checkSelfPermission(getContext(), android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(getOwnerActivity(), new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
-        } else {
-            // 启动文件选择器（选择音频或视频）
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("*/*");  // 可以选择所有类型的文件，或者修改为"video/*"或"audio/*"
-            selectFileLauncher.launch(intent);  // 使用新的方式启动文件选择器
-        }
-    }
-
 
     // 设置音频输出设备
     public void setAudioDevice(AudioDeviceInfo selectedDevice) {
+        if(selectedDevice!=null) {
+            Log.d("AudioDevice", "设置音频输出" );
             boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
             if (success) {
                 isAudioDeviceSet = true;  // 设置成功，标志位为 true
@@ -131,6 +159,9 @@ public class MyPresentation extends Presentation {
                 isAudioDeviceSet = false;  // 设置失败，标志位为 false
                 Log.d("AudioDevice", "设置设备失败");
             }
+        }else {
+            Log.d("AudioDevice", "selectedDevice为空" );
+        }
     }
 
 
