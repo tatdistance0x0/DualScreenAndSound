@@ -3,6 +3,7 @@ package com.example.dualscreenandsound;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.hardware.display.DisplayManager;
@@ -52,14 +53,15 @@ public class MainActivity extends AppCompatActivity {
     private String selectedPresentionFilePath = "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
-    private Uri selectedUri;
     public static Uri presentionselectedUri;
-    private Uri toggleSelectedUri;
+    private Uri selectedUri,toggleSelectedUri,previousUri;
     private AudioDeviceInfo selectedDevice ;
     public static AudioDeviceInfo selectedDeviceCache;
     private long currentPosition = 0;  // 用来保存当前播放的位置
     private SurfaceHolder surfaceHolder;
     private Surface surface;
+    public static boolean isSwitchingToNewVideo = false;
+    private String filePath, previousFilePath = null;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -160,21 +162,15 @@ public class MainActivity extends AppCompatActivity {
                 result -> handleFileResult(result, false));
 
         // 确保 presentation.selectFileLauncher 被初始化
-//        if (presentation != null) {
-            if (selectFileLauncherCache == null) {
-                selectFileLauncherCache = registerForActivityResult(
-                        new ActivityResultContracts.StartActivityForResult(),
-                        result -> handleFileResult(result, true));
-                Log.d("AudioDevice", "注册presentation.selectFileLauncher");
-            }else{
-                Log.d("AudioDevice", "presentation.selectFileLauncher为空");
-            }
-//            selectFileLauncherCache =  presentation.selectFileLauncher;
-//        }else{
-//            Log.d("AudioDevice", "presentation为空");
-//        }
 
-        // 缓存 selectFileLauncher，防止presentation被释放的时候presentation.selectFileLauncher与registerForActivityResult失去关系
+        if (selectFileLauncherCache == null) {
+            selectFileLauncherCache = registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    result -> handleFileResult(result, true));
+            Log.d("AudioDevice", "注册presentation.selectFileLauncher");
+        }else{
+            Log.d("AudioDevice", "presentation.selectFileLauncher为空");
+        }
 
         // 按钮点击事件，打开文件选择器
         Button selectFileButton = findViewById(R.id.btn_selectfile);
@@ -280,20 +276,47 @@ public class MainActivity extends AppCompatActivity {
             Intent data = result.getData();
             if (data != null && data.getData() != null) {
                 toggleSelectedUri = data.getData();
-                String filePath = getRealPathFromURI(toggleSelectedUri);
-
+                filePath = getRealPathFromURI(toggleSelectedUri);
+                if(previousUri!=null) {
+                    previousFilePath = getRealPathFromURI(previousUri);
+                }
                 if (filePath != null) {
                     if (isPresentation) {
                         presentionselectedUri = toggleSelectedUri; // 保存副屏文件的 URI
                         selectedPresentionFilePath = filePath;
+
+                        // 判断是否为新的视频文件
+                        if (!filePath.equals(previousFilePath)) {
+                            Log.d("PresentationFilePath", "选择了新的视频文件: " + selectedPresentionFilePath);
+                            // 如果是新文件，可以做一些额外操作，比如恢复播放进度等
+                            isSwitchingToNewVideo = true;
+                        } else {
+                            Log.d("PresentationFilePath", "选择的是同一个视频文件");
+                            isSwitchingToNewVideo = false;
+                        }
                         Log.d("selectedPresentionFilePath", "文件路径为: " + selectedPresentionFilePath);
                         Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
                     } else {
                         selectedUri = toggleSelectedUri; // 保存主屏文件的 URI
                         selectedFilePath = filePath;
+
+                        // 判断是否为新的视频文件
+                        if (!filePath.equals(previousFilePath)) {
+                            Log.d("SelectedFilePath", "选择了新的视频文件: " + selectedFilePath);
+                            // 如果是新文件，可以做一些额外操作，比如恢复播放进度等
+                            isSwitchingToNewVideo = true;
+                        } else {
+                            Log.d("SelectedFilePath", "选择的是同一个视频文件");
+                            isSwitchingToNewVideo = false;
+                        }
+
                         Log.d("SelectedFilePath", "文件路径为: " + selectedFilePath);
                         Toast.makeText(MainActivity.this, "文件已选择: " + selectedFilePath, Toast.LENGTH_SHORT).show();
                     }
+                    // 仅在文件选择和比较完成后，才更新 previousUri 和 previousFilePath
+                    previousUri = toggleSelectedUri;
+                    previousFilePath = filePath;
+
                 } else {
                     Log.d("SelectedFilePath", "无法获取文件路径");
                 }
@@ -370,9 +393,21 @@ public class MainActivity extends AppCompatActivity {
         if (mediaPlayer != null) {
             try {
                 Log.d("MediaPlayer", "尝试恢复restorePlaybackState");
-                mediaPlayer.seekTo((int) currentPosition);  // 恢复播放进度
-                if (isVideoPlaying) {
-                    mediaPlayer.start();  // 恢复播放
+
+                if (isSwitchingToNewVideo) {
+                    // 如果切换到新的视频，确保从0秒开始播放
+                    Log.d("MediaPlayer", "从0秒开始播放");
+                    mediaPlayer.seekTo(0);
+                } else {
+                    // 恢复播放进度
+                    Log.d("MediaPlayer", "恢复播放进度");
+                    mediaPlayer.seekTo((int) currentPosition);
+                }
+
+                if (isVideoPlaying && !isSwitchingToNewVideo) {
+                    // 如果之前在播放，且不是切换到新视频，则继续播放
+                    Log.d("MediaPlayer", "之前在播放，且不是切换到新视频，则继续播放");
+                    mediaPlayer.start();
                 }
             } catch (IllegalStateException e) {
                 // 处理可能的错误

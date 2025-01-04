@@ -130,14 +130,41 @@ public class MyPresentation extends Presentation {
     }
 
     // 恢复MediaPlayer播放状态
-    public void restorePlaybackState() {
+//    public void restorePlaybackState() {
+//        if (mediaPlayer != null) {
+//            try {
+//                Log.d("MediaPlayer", "尝试恢复PresentionrestorerestorePlaybackState");
+//                mediaPlayer.seekTo((int) currentPosition);  // 恢复播放进度
+//                if (isVideoPlaying) {
+//                    mediaPlayer.start();  // 恢复播放
+//                    Log.d("MediaPlayer", "恢复播放Presention");
+//                }
+//            } catch (IllegalStateException e) {
+//                // 处理可能的错误
+//                e.printStackTrace();
+//            }
+//        }
+//    }
+    // 恢复MediaPlayer播放状态
+    private void restorePlaybackState() {
         if (mediaPlayer != null) {
             try {
-                Log.d("MediaPlayer", "尝试恢复PresentionrestorerestorePlaybackState");
-                mediaPlayer.seekTo((int) currentPosition);  // 恢复播放进度
-                if (isVideoPlaying) {
-                    mediaPlayer.start();  // 恢复播放
-                    Log.d("MediaPlayer", "恢复播放Presention");
+                Log.d("MediaPlayer", "尝试恢复restorePlaybackState");
+
+                if (MainActivity.isSwitchingToNewVideo) {
+                    // 如果切换到新的视频，确保从0秒开始播放
+                    Log.d("MediaPlayer", "从0秒开始播放");
+                    mediaPlayer.seekTo(0);
+                } else {
+                    // 恢复播放进度
+                    Log.d("MediaPlayer", "恢复播放进度");
+                    mediaPlayer.seekTo((int) currentPosition);
+                }
+
+                if (isVideoPlaying && !MainActivity.isSwitchingToNewVideo) {
+                    // 如果之前在播放，且不是切换到新视频，则继续播放
+                    Log.d("MediaPlayer", "之前在播放，且不是切换到新视频，则继续播放");
+                    mediaPlayer.start();
                 }
             } catch (IllegalStateException e) {
                 // 处理可能的错误
@@ -145,7 +172,6 @@ public class MyPresentation extends Presentation {
             }
         }
     }
-
 
     // 设置音频输出设备
     public void setAudioDevice(AudioDeviceInfo selectedDevice) {
