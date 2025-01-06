@@ -3,7 +3,6 @@ package com.example.dualscreenandsound;
 import android.app.Presentation;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -13,12 +12,7 @@ import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import java.io.IOException;
 
 
@@ -50,14 +44,7 @@ public class MyPresentation extends Presentation {
                 // Surface 创建后，可以初始化播放器
                 if (MainActivity.presentionselectedUri != null) {
                     initMediaPlayer(MainActivity.presentionselectedUri, surface);  // 直接传递Uri给MediaPlayer
-
                 }
-//                selectedDevice = MainActivity.selectedDeviceCache;
-//                if(selectedDevice!= null){
-//                    setAudioDevice(selectedDevice);
-//                }else{
-//                    Log.d("MediaPlayer", "selectedDevice is null");
-//                }
             }
 
             @Override
@@ -129,22 +116,6 @@ public class MyPresentation extends Presentation {
         }
     }
 
-    // 恢复MediaPlayer播放状态
-//    public void restorePlaybackState() {
-//        if (mediaPlayer != null) {
-//            try {
-//                Log.d("MediaPlayer", "尝试恢复PresentionrestorerestorePlaybackState");
-//                mediaPlayer.seekTo((int) currentPosition);  // 恢复播放进度
-//                if (isVideoPlaying) {
-//                    mediaPlayer.start();  // 恢复播放
-//                    Log.d("MediaPlayer", "恢复播放Presention");
-//                }
-//            } catch (IllegalStateException e) {
-//                // 处理可能的错误
-//                e.printStackTrace();
-//            }
-//        }
-//    }
     // 恢复MediaPlayer播放状态
     private void restorePlaybackState() {
         if (mediaPlayer != null) {

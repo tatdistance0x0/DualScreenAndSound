@@ -1,10 +1,7 @@
 package com.example.dualscreenandsound;
 
-import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.hardware.display.DisplayManager;
 import android.media.AudioDeviceInfo;
@@ -27,15 +24,10 @@ import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,8 +41,7 @@ public class MainActivity extends AppCompatActivity {
     private SurfaceView surfaceView;
     private List<AudioDeviceInfo> OutputDevices;
     private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2;
-    private String selectedFilePath = "";  // 用于保存选择的文件路径
-    private String selectedPresentionFilePath = "";  // 用于保存选择的文件路径
+    private String selectedFilePath,selectedPresentionFilePath,previousMainScreenFilePath, previousPresentationFilePath= "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
     public static Uri presentionselectedUri;
@@ -231,6 +222,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d("AudioDevice", "请选择文件");
             return;
         }
+        //切换前最好暂停一下
         pauseMediaPlayerIfPlaying(presentation.mediaPlayer);  // 如果正在播放，暂停
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
@@ -249,6 +241,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d("AudioDevice", "请选择文件");
             return;
         }
+        //切换前最好暂停一下
         pauseMediaPlayerIfPlaying(mediaPlayer);  // 如果正在播放，暂停
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
@@ -277,16 +270,13 @@ public class MainActivity extends AppCompatActivity {
             if (data != null && data.getData() != null) {
                 toggleSelectedUri = data.getData();
                 filePath = getRealPathFromURI(toggleSelectedUri);
-                if(previousUri!=null) {
-                    previousFilePath = getRealPathFromURI(previousUri);
-                }
                 if (filePath != null) {
                     if (isPresentation) {
                         presentionselectedUri = toggleSelectedUri; // 保存副屏文件的 URI
                         selectedPresentionFilePath = filePath;
 
                         // 判断是否为新的视频文件
-                        if (!filePath.equals(previousFilePath)) {
+                        if (!filePath.equals(previousPresentationFilePath)) {
                             Log.d("PresentationFilePath", "选择了新的视频文件: " + selectedPresentionFilePath);
                             // 如果是新文件，可以做一些额外操作，比如恢复播放进度等
                             isSwitchingToNewVideo = true;
@@ -296,12 +286,15 @@ public class MainActivity extends AppCompatActivity {
                         }
                         Log.d("selectedPresentionFilePath", "文件路径为: " + selectedPresentionFilePath);
                         Toast.makeText(MainActivity.this, "文件已选择: " + selectedPresentionFilePath, Toast.LENGTH_SHORT).show();
+
+                        // 更新副屏的 previousFilePath
+                        previousPresentationFilePath = filePath;
                     } else {
                         selectedUri = toggleSelectedUri; // 保存主屏文件的 URI
                         selectedFilePath = filePath;
 
                         // 判断是否为新的视频文件
-                        if (!filePath.equals(previousFilePath)) {
+                        if (!filePath.equals(previousMainScreenFilePath)) {
                             Log.d("SelectedFilePath", "选择了新的视频文件: " + selectedFilePath);
                             // 如果是新文件，可以做一些额外操作，比如恢复播放进度等
                             isSwitchingToNewVideo = true;
@@ -312,10 +305,10 @@ public class MainActivity extends AppCompatActivity {
 
                         Log.d("SelectedFilePath", "文件路径为: " + selectedFilePath);
                         Toast.makeText(MainActivity.this, "文件已选择: " + selectedFilePath, Toast.LENGTH_SHORT).show();
+
+                        // 更新主屏的 previousFilePath
+                        previousMainScreenFilePath = filePath;
                     }
-                    // 仅在文件选择和比较完成后，才更新 previousUri 和 previousFilePath
-                    previousUri = toggleSelectedUri;
-                    previousFilePath = filePath;
 
                 } else {
                     Log.d("SelectedFilePath", "无法获取文件路径");
