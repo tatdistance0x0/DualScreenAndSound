@@ -4,5 +4,9 @@
     <string name="presentation_displaymanager">副屏播放</string>
     <string name="btn_selectfile">打开主屏视频/音频文件</string>
     <string name="btn_presentation_selectfile">打开副屏视频/音频文件</string>
-
+    <string-array name="display_names">
+        <item>副屏 1</item>
+        <item>副屏 2</item>
+        <item>副屏 3</item>
+    </string-array>
 </resources>
