@@ -31,7 +31,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
     private AudioManager mAudioManager;
@@ -45,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
     public static Uri presentionselectedUri;
-    private Uri selectedUri,toggleSelectedUri,previousUri;
+    private Uri selectedUri,toggleSelectedUri;
     private AudioDeviceInfo selectedDevice ;
     public static AudioDeviceInfo selectedDeviceCache;
     private long currentPosition = 0;  // 用来保存当前播放的位置
@@ -55,11 +57,12 @@ public class MainActivity extends AppCompatActivity {
     private String filePath= null;
     // 存储所有 presentation 的列表
     private List<MyPresentation> presentations = new ArrayList<>();
-    private List<String> displayNames = new ArrayList<>();
-    private List<String> displayIds  = new ArrayList<>();
     private List<String> deviceNames = new ArrayList<>();
     private DisplayManager displayManager ;
     private Display[] allDisplays;
+    // 使用一个 HashMap 来存储副屏 ID 和对应的 MyPresentation 实例
+    private Map<Integer, MyPresentation> presentationMap = new HashMap<>();
+    private int selectedDisplayId;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -145,6 +148,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 if (presentation != null) {
+                    Log.d("Display", "Initializing presentation for display ID: " + selectedDisplayId);
                     // presentation 不为空时调用通用播放控制方法
                     toggleMediaPlayer(presentation.mediaPlayer, presentation.isAudioDeviceSet, btn2);
                 } else {
@@ -518,23 +522,16 @@ public class MainActivity extends AppCompatActivity {
 
                 // 如果是目标副屏，则进行处理
                 if (display.getDisplayId() == displayId) {
-                    // 检查是否已经有一个presentation存在
-                    boolean found = false;
-                    for (MyPresentation p : presentations) {
-                        if (p.getDisplay().getDisplayId() == displayId) {
-                            found = true;
-                            Log.d("AudioDevice", "Found existing presentation for display ID: " + displayId);
-                            break; // 如果已存在，跳出循环
-                        }
-                    }
-
                     // 如果没有找到现有的 presentation，创建新的
-                    if (!found) {
+                    if (!presentationMap.containsKey(displayId)) {
                         Log.d("AudioDevice", "Creating new presentation on display ID: " + displayId);
-                        presentation = new MyPresentation(this, display);
-                        presentations.add(presentation);  // 保持对 presentation 的引用
-                        presentation.show();
+                        MyPresentation newPresentation = new MyPresentation(this, display);
+                        presentationMap.put(displayId, newPresentation);
+                        newPresentation.show();
+
                     }
+                    presentation = presentationMap.get(selectedDisplayId);
+                    Log.d("AudioDevice", "Current presentation set to display ID: " + displayId);
                     return; // 一旦找到目标副屏并处理完，退出循环
                 }
             }
@@ -649,7 +646,7 @@ public class MainActivity extends AppCompatActivity {
                     // 获取选中的 DisplayItem 对象
                     DisplayItem selectedDisplayItem = displayItems.get(position);
                     // 取得 displayId 并传递给 initializePresentation 方法
-                    int selectedDisplayId = selectedDisplayItem.displayId;
+                    selectedDisplayId = selectedDisplayItem.displayId;
                     initializePresentation(selectedDisplayId);
                 }else {
                     Log.d("AudioDevice", " position <= 0 && position > presentations.size()");
