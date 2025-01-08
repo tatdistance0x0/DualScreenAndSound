@@ -85,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-        allDisplays = displayManager.getDisplays();
+
         setupDisplayListener();
 //        initializePresentation();
 
@@ -272,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
-                presentation.setAudioDevice(selectedDeviceCache);
+                presentation. setAudioDevice(selectedDeviceCache);
 //                resumeMediaPlayerIfPlaying(presentation.mediaPlayer);  // 恢复播放
             }
         }, 500);  // 延迟 0.5 秒
@@ -516,7 +516,7 @@ public class MainActivity extends AppCompatActivity {
             public void onDisplayChanged(int displayId) {
                 // 副屏发生变化时，可能需要更新 display 或者重新初始化 presentation
                 Log.d("AudioDevice", "Display changed: " + displayId);
-//                initializePresentation();
+                 refreshAudioDeviceList();
             }
             @Override
             public void onDisplayRemoved(int displayId) {
@@ -604,24 +604,57 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void refreshAudioDeviceList() {
+
+        deviceNames.clear();
+        displayItems.clear();
+        // 获取所有显示设备的名称（包括主屏和副屏）
+        allDisplays = displayManager.getDisplays();
+        for (Display display : allDisplays) {
+            String displayName = "显示器 " + display.getDisplayId(); // 根据需要自定义显示名称
+            int displayId = display.getDisplayId();
+            // 检查是否已存在显示器ID，避免重复添加
+            boolean exists = false;
+            for (DisplayItem item : displayItems) {
+                if (item.displayId == displayId) {
+                    exists = true;
+                    break;
+                }
+            }
+            // 如果没有重复的显示器ID，才添加
+            if (!exists) {
+                displayItems.add(new DisplayItem(displayName, displayId)); // 创建一个新的 DisplayItem 对象并添加到列表
+            }
+        }
+
+        displaySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
+                if (position >= 0) {
+                    // 获取选中的 DisplayItem 对象
+                    DisplayItem selectedDisplayItem = displayItems.get(position);
+                    // 取得 displayId 并传递给 initializePresentation 方法
+                    selectedDisplayId = selectedDisplayItem.displayId;
+                    initializePresentation(selectedDisplayId);
+                    handleDeviceSelectionForPresentation(device);
+                }else {
+                    Log.d("AudioDevice", " position <= 0 && position > presentations.size()");
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parentView) {
+            }
+        });
+
         // 获取所有音频输出设备
         OutputDevices = Arrays.asList(mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
         // 获取设备类型并转换为可显示的名称
-
         for (AudioDeviceInfo device : OutputDevices) {
             String deviceTypeName = getDeviceTypeName(device.getType());
             Log.d("AudioDevice", "Device ID: " + device.getId() + " Name: " + device.getProductName() + " Type: " + deviceTypeName);
             deviceNames.add(deviceTypeName);
         }
-
-
-        // 获取所有显示设备的名称（包括主屏和副屏）
-        for (Display display : allDisplays) {
-            String displayName = "显示器 " + display.getDisplayId(); // 可根据需求调整设备名称
-            int displayId = display.getDisplayId();
-            displayItems.add(new DisplayItem(displayName, displayId)); // 创建一个 DisplayItem 对象并保存
-        }
-// 刷新显示设备 Spinner 适配器
+        // 刷新显示设备 Spinner 适配器
         ArrayAdapter<DisplayItem> displayAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, displayItems);
         displayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         displaySpinner.setAdapter(displayAdapter);
@@ -629,12 +662,9 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, deviceNames);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 
-
-
         // 设置新适配器到 Spinner1 和 Spinner2
         mAudioDevicesSpinner1.setAdapter(adapter);
         mAudioDevicesSpinner2.setAdapter(adapter);
-
 
         // 重新设置 Spinner 的监听器（如果需要）
         mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -662,26 +692,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-
-        displaySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                if (position >= 0) {
-                    // 获取选中的 DisplayItem 对象
-                    DisplayItem selectedDisplayItem = displayItems.get(position);
-                    // 取得 displayId 并传递给 initializePresentation 方法
-                    selectedDisplayId = selectedDisplayItem.displayId;
-                    initializePresentation(selectedDisplayId);
-                    handleDeviceSelectionForPresentation(device);
-                }else {
-                    Log.d("AudioDevice", " position <= 0 && position > presentations.size()");
-                }
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parentView) {
-            }
-        });
     }
     @Override
     public void onStop() {
