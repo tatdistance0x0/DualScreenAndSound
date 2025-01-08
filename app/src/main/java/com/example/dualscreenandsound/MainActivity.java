@@ -55,14 +55,30 @@ public class MainActivity extends AppCompatActivity {
     private Surface surface;
     public static boolean isSwitchingToNewVideo = false;
     private String filePath= null;
-    // 存储所有 presentation 的列表
-    private List<MyPresentation> presentations = new ArrayList<>();
     private List<String> deviceNames = new ArrayList<>();
-    private DisplayManager displayManager ;
-    private Display[] allDisplays;
+    private List<DisplayItem> displayItems = new ArrayList<>();
     // 使用一个 HashMap 来存储副屏 ID 和对应的 MyPresentation 实例
     private Map<Integer, MyPresentation> presentationMap = new HashMap<>();
+    private DisplayManager displayManager ;
+    private Display[] allDisplays;
+
     private int selectedDisplayId;
+    private Object device = 0;
+
+    private class DisplayItem {
+        String displayName;
+        int displayId;
+
+        DisplayItem(String displayName, int displayId) {
+            this.displayName = displayName;
+            this.displayId = displayId;
+        }
+
+        @Override
+        public String toString() {
+            return displayName; // Spinner 显示的是 displayName
+        }
+    }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -72,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
         allDisplays = displayManager.getDisplays();
         setupDisplayListener();
 //        initializePresentation();
+
         surfaceView = findViewById(R.id.surfaceView);  // SurfaceView 用于显示视频
         surface = surfaceView.getHolder().getSurface();
         surfaceHolder = surfaceView.getHolder();
@@ -88,9 +105,13 @@ public class MainActivity extends AppCompatActivity {
                 if (presentation != null) {
                     if (presentionselectedUri != null) {
                         presentation.initMediaPlayer(presentionselectedUri,presentation.surface);  // 直接传递Uri给MediaPlayer
-                        presentation.setAudioDevice(presentation.selectedDevice);
                     } else {
                         Log.d("MediaPlayer", "请选择副屏文件");
+                    }
+                    if (selectedDeviceCache != null) {
+                        presentation.setAudioDevice(selectedDeviceCache);
+                    } else {
+                        Log.d("MediaPlayer", "selectedDeviceCacheh is null");
                     }
                 }else{
                     Log.d("MediaPlayer", "请连接副屏");
@@ -150,6 +171,7 @@ public class MainActivity extends AppCompatActivity {
                 if (presentation != null) {
                     Log.d("Display", "Initializing presentation for display ID: " + selectedDisplayId);
                     // presentation 不为空时调用通用播放控制方法
+                    presentation.isAudioDeviceSet = true;
                     toggleMediaPlayer(presentation.mediaPlayer, presentation.isAudioDeviceSet, btn2);
                 } else {
                     Toast.makeText(getApplicationContext(), "请连接副屏", Toast.LENGTH_SHORT).show();
@@ -213,7 +235,7 @@ public class MainActivity extends AppCompatActivity {
 
     // 通用方法：设置音频设备并恢复播放状态
     private void handleAudioDeviceSelection(AdapterView<?> parentView, View selectedItemView, int position, long id, boolean isPresentation) {
-        final Object device = OutputDevices.get(position);
+        device = OutputDevices.get(position);
 
         // 处理音频设备选择和播放状态恢复
         if (isPresentation) {
@@ -230,7 +252,16 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         presentation.selectedDevice = (AudioDeviceInfo) device;
-        selectedDeviceCache = presentation.selectedDevice;
+        Log.d("AudioDevice", "选中的设备信息：");
+        Log.d("AudioDevice", "设备ID: " + selectedDevice.getId());
+        Log.d("AudioDevice", "设备名称: " + selectedDevice.getProductName());
+        Log.d("AudioDevice", "设备类型: " + selectedDevice.getType());
+        if (presentation.selectedDevice != null) {
+            selectedDeviceCache = presentation.selectedDevice;
+        }else{
+            Log.d("AudioDevice", "presentation.selectedDevice为空，所以没有传递给selectedDeviceCache");
+        }
+
         if (selectedPresentionFilePath == null || selectedPresentionFilePath.isEmpty()) {
             Log.d("AudioDevice", "请选择文件");
             return;
@@ -250,6 +281,7 @@ public class MainActivity extends AppCompatActivity {
     // 处理普通音频设备选择的方法
     private void handleDeviceSelectionForAudio(Object device) {
         selectedDevice = (AudioDeviceInfo) device;
+        Log.d("AudioDevice", "handleDeviceSelectionForAudio 拿到的Selected Device: " + selectedDevice);
         if (selectedFilePath == null || selectedFilePath.isEmpty()) {
             Log.d("AudioDevice", "请选择文件");
             return;
@@ -358,7 +390,9 @@ public class MainActivity extends AppCompatActivity {
             Log.d("MediaPlayer", "主屏URI: " + fileUri.toString());
             // 设置数据源为本地视频文件的路径
             mediaPlayer.setDataSource(this, fileUri);
+            Log.d("MediaPlayer", "设置数据源");
             mediaPlayer.setSurface(surface);  // 绑定Surface
+            Log.d("MediaPlayer", "绑定Surface");
             mediaPlayer.setOnPreparedListener(mp -> {
                 Log.d("MediaPlayer", "播放器准备完毕");
                 // 恢复播放状态
@@ -458,6 +492,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
     //监听副屏连接变化
     private void setupDisplayListener() {
         DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
@@ -476,7 +511,6 @@ public class MainActivity extends AppCompatActivity {
 
                 // 刷新音频设备列表
                 Log.d("AudioDevice", "onDisplayAdded刷新音频设备列表");
-                refreshAudioDeviceList();
             }
             @Override
             public void onDisplayChanged(int displayId) {
@@ -530,7 +564,7 @@ public class MainActivity extends AppCompatActivity {
                         newPresentation.show();
 
                     }
-                    presentation = presentationMap.get(selectedDisplayId);
+                    presentation = presentationMap.get(selectedDisplayId);//将控制的实例与选择的副屏联系起来
                     Log.d("AudioDevice", "Current presentation set to display ID: " + displayId);
                     return; // 一旦找到目标副屏并处理完，退出循环
                 }
@@ -561,6 +595,8 @@ public class MainActivity extends AppCompatActivity {
                 return "麦克风";
             case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
                 return "蓝牙语音设备";
+            case AudioDeviceInfo.TYPE_LINE_DIGITAL:
+                return "dp转hdmi";
             default:
                 return "未知设备类型";
         }
@@ -574,23 +610,11 @@ public class MainActivity extends AppCompatActivity {
 
         for (AudioDeviceInfo device : OutputDevices) {
             String deviceTypeName = getDeviceTypeName(device.getType());
+            Log.d("AudioDevice", "Device ID: " + device.getId() + " Name: " + device.getProductName() + " Type: " + deviceTypeName);
             deviceNames.add(deviceTypeName);
         }
-        class DisplayItem {
-            String displayName;
-            int displayId;
 
-            DisplayItem(String displayName, int displayId) {
-                this.displayName = displayName;
-                this.displayId = displayId;
-            }
 
-            @Override
-            public String toString() {
-                return displayName; // Spinner 显示的是 displayName
-            }
-        }
-        List<DisplayItem> displayItems = new ArrayList<>();
         // 获取所有显示设备的名称（包括主屏和副屏）
         for (Display display : allDisplays) {
             String displayName = "显示器 " + display.getDisplayId(); // 可根据需求调整设备名称
@@ -648,6 +672,7 @@ public class MainActivity extends AppCompatActivity {
                     // 取得 displayId 并传递给 initializePresentation 方法
                     selectedDisplayId = selectedDisplayItem.displayId;
                     initializePresentation(selectedDisplayId);
+                    handleDeviceSelectionForPresentation(device);
                 }else {
                     Log.d("AudioDevice", " position <= 0 && position > presentations.size()");
                 }
