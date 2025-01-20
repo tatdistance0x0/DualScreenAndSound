@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.hardware.display.DisplayManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
+import android.media.AudioSystem;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
@@ -34,6 +35,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 
 public class MainActivity extends AppCompatActivity {
     private AudioManager mAudioManager;
@@ -578,9 +580,11 @@ public class MainActivity extends AppCompatActivity {
     public String getDeviceTypeName(int deviceType) {
         switch (deviceType) {
             case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER:
-                return "扬声器";
+                return AudioSystem.DEVICE_OUT_SPEAKER_NAME;
             case AudioDeviceInfo.TYPE_HDMI:
-                return "HDMI";
+                return AudioSystem.DEVICE_OUT_HDMI_NAME;
+//            case AudioDeviceInfo.TYPE_HDMI_1:
+//                return AudioSystem.DEVICE_OUT_HDMI1_NAME;
             case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
                 return "蓝牙音频设备";
             case AudioDeviceInfo.TYPE_WIRED_HEADPHONES:
@@ -596,7 +600,9 @@ public class MainActivity extends AppCompatActivity {
             case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
                 return "蓝牙语音设备";
             case AudioDeviceInfo.TYPE_LINE_DIGITAL:
-                return "dp转hdmi";
+                return AudioSystem.DEVICE_OUT_SPDIF_NAME;
+//            case AudioDeviceInfo.TYPE_LINE_DIGITAL_1:
+//                return AudioSystem.DEVICE_OUT_SPDIF1_NAME;
             default:
                 return "未知设备类型";
         }

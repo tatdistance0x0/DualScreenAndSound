@@ -28,11 +28,54 @@ android {
     }
 }
 
-dependencies {
 
+dependencies {
+//    implementation files('libs\\framework.jar')
+    compileOnly files('libs\\framework.jar')
     implementation 'androidx.appcompat:appcompat:1.4.1'
     implementation 'com.google.android.material:material:1.5.0'
+    implementation 'com.android.support:multidex:1.0.0'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+}
+
+
+gradle.projectsEvaluated {
+    // 方法一
+    tasks.withType(JavaCompile) {
+        Set<File> fileSet = options.bootstrapClasspath.getFiles();
+        List<File> newFileList = new ArrayList<>()
+        newFileList.add(new File("libs/framework.jar"))
+        newFileList.addAll(fileSet)
+        options.bootstrapClasspath = files(newFileList.toArray())
+    }
+
+//     方法二
+//    tasks.withType(JavaCompile).tap {
+//        configureEach {
+//            options.compilerArgs.add("-Xbootclasspath/p:$rootProject.rootDir/app/libs/framework.jar")
+//        }
+//    }
+}
+
+// 降低Android SDK的使用级别，优先使用framework.jar中的类文件
+preBuild {
+    doLast {
+        def rootProjectName = rootProject.name.replace(" ", "_")
+        def projectName = project.name.replace(" ", "_")
+        def iml_path = "$rootProject.rootDir\\.idea\\modules\\" + projectName + "\\" + rootProjectName + "." + projectName + ".main.iml"
+        def imlFile = file(iml_path)
+        try {
+            // 如果AS未适配，这里会找不到XmlParser
+            def parsedXml = (new XmlParser()).parse(imlFile)
+            def jdkNode = parsedXml.component[1].orderEntry.find { it.'@type' == 'jdk' }
+            def sdkString = jdkNode.'@jdkName'
+            parsedXml.component[1].remove(jdkNode)
+            new Node(parsedXml.component[1], 'orderEntry', ['type': 'jdk', 'jdkName': sdkString, 'jdkType': 'Android SDK'])
+            groovy.xml.XmlUtil.serialize(parsedXml, new FileOutputStream(imlFile))
+        } catch (FileNotFoundException e) {
+            e.printStackTrace()
+        }
+    }
 }
