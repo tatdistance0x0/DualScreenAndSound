@@ -115,23 +115,3 @@ https://github.com/tatdistance0x0
 # License
 
 MIT License
-README最终效果
-
-GitHub 页面会变成类似这样：
-
-DualScreenAndSound
-Android demo for multi-display and audio routing
-
-Features
-✔ Dual screen presentation
-✔ HDMI / DP audio routing
-✔ Display connect detection
-✔ Media playback
-
-Technologies
-DisplayManager
-Presentation API
-MediaPlayer
-AudioDeviceInfo
-
-看起来就像一个 完整开源项目。
