@@ -105,6 +105,11 @@ This project is useful for:
 
 ---
 
+## Download APK
+
+[Download APK](https://github.com/tatdistance0x0/DualScreenAndSound/releases)
+
+---
 # 作者 | Author
 
 GitHub  
