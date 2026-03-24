@@ -10,8 +10,11 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioSystem;
 import android.media.MediaPlayer;
+import android.media.SyncParams;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Log;
@@ -103,6 +106,18 @@ public class MainActivity extends AppCompatActivity {
     private long mainAudioSpinnerTouchTs = 0L;
     private long presentationAudioSpinnerTouchTs = 0L;
     private long displaySpinnerTouchTs = 0L;
+    private static final long ROUTE_SWITCH_DEBOUNCE_MS = 220L;
+    private static final long ROUTE_SWITCH_GLOBAL_INTERVAL_MS = 850L;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private boolean systemStreamMutedByApp = false;
+    private final Runnable restoreSystemStreamRunnable = this::restoreSystemUiSoundEffects;
+    private AudioDeviceInfo pendingMainRouteDevice = null;
+    private AudioDeviceInfo pendingPresentationRouteDevice = null;
+    private long lastGlobalRouteApplyTs = 0L;
+    private boolean routeSwitchInProgress = false;
+    private long pendingMainRouteTs = 0L;
+    private long pendingPresentationRouteTs = 0L;
+    private final Runnable applyRouteSwitchQueueRunnable = this::drainRouteSwitchQueue;
 
     private class DisplayItem {
         String displayName;
@@ -189,6 +204,7 @@ public class MainActivity extends AppCompatActivity {
         displaySpinner = findViewById(R.id.displaySpinner);
         mAudioDevicesSpinner1.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                suppressSystemUiSoundEffectsTemporarily();
                 mainAudioSpinnerTouched = true;
                 mainAudioSpinnerTouchTs = SystemClock.uptimeMillis();
             }
@@ -196,6 +212,7 @@ public class MainActivity extends AppCompatActivity {
         });
         mAudioDevicesSpinner2.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                suppressSystemUiSoundEffectsTemporarily();
                 presentationAudioSpinnerTouched = true;
                 presentationAudioSpinnerTouchTs = SystemClock.uptimeMillis();
             }
@@ -203,6 +220,7 @@ public class MainActivity extends AppCompatActivity {
         });
         displaySpinner.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                suppressSystemUiSoundEffectsTemporarily();
                 displaySpinnerTouched = true;
                 displaySpinnerTouchTs = SystemClock.uptimeMillis();
             }
@@ -239,6 +257,7 @@ public class MainActivity extends AppCompatActivity {
                             presentation.initMediaPlayer(presentionselectedUri, presentationSurface);
                             if (selectedDeviceCache != null) {
                                 presentation.setAudioDevice(selectedDeviceCache);
+                                maybePrimePresentationOutput("button-init");
                             }
                             Toast.makeText(getApplicationContext(), "副屏播放器初始化中，请再点击一次播放", Toast.LENGTH_SHORT).show();
                         } else {
@@ -251,7 +270,7 @@ public class MainActivity extends AppCompatActivity {
                         Toast.makeText(getApplicationContext(), "请选择副屏音频通道", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    toggleMediaPlayer(presentation.mediaPlayer, true, btn2);
+                    togglePresentationPlayback(btn2);
                 } else {
                     Toast.makeText(getApplicationContext(), "请连接副屏", Toast.LENGTH_SHORT).show();
                 }
@@ -315,6 +334,32 @@ public class MainActivity extends AppCompatActivity {
             if (view == null) continue;
             view.setSoundEffectsEnabled(false);
             view.setHapticFeedbackEnabled(false);
+        }
+    }
+
+    private void suppressSystemUiSoundEffectsTemporarily() {
+        if (mAudioManager == null) return;
+        uiHandler.removeCallbacks(restoreSystemStreamRunnable);
+        if (!systemStreamMutedByApp) {
+            try {
+                mAudioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0);
+                systemStreamMutedByApp = true;
+            } catch (Exception e) {
+                Log.w("AudioDevice", "临时静音系统音效失败", e);
+                return;
+            }
+        }
+        uiHandler.postDelayed(restoreSystemStreamRunnable, 1800);
+    }
+
+    private void restoreSystemUiSoundEffects() {
+        if (!systemStreamMutedByApp || mAudioManager == null) return;
+        try {
+            mAudioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0);
+        } catch (Exception e) {
+            Log.w("AudioDevice", "恢复系统音效失败", e);
+        } finally {
+            systemStreamMutedByApp = false;
         }
     }
 
@@ -602,6 +647,7 @@ public class MainActivity extends AppCompatActivity {
                     buttonText.setText("播放");
                 } else {
                     mediaPlayer.start();
+                    scheduleMainSyncNudge("main-manual-start");
                     buttonText.setText("暂停");
                 }
             } else {
@@ -656,16 +702,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d("AudioDevice", "副屏播放器未初始化，跳过设置");
             return;
         }
-        boolean wasPlaying = presentation.mediaPlayer.isPlaying();
-        Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
-        presentation.setAudioDevice(selectedDeviceCache);
-        if (wasPlaying && !presentation.mediaPlayer.isPlaying()) {
-            try {
-                presentation.mediaPlayer.start();
-            } catch (IllegalStateException e) {
-                Log.e("AudioDevice", "副屏恢复播放失败", e);
-            }
-        }
+        schedulePresentationRouteSwitch(newDevice);
     }
 
     // 处理普通音频设备选择的方法
@@ -686,13 +723,130 @@ public class MainActivity extends AppCompatActivity {
             Log.d("AudioDevice", "主屏播放器未初始化，跳过设置");
             return;
         }
+        scheduleMainRouteSwitch(newDevice);
+    }
+
+    private void scheduleMainRouteSwitch(AudioDeviceInfo targetDevice) {
+        if (targetDevice == null) return;
+        pendingMainRouteDevice = targetDevice;
+        pendingMainRouteTs = SystemClock.uptimeMillis();
+        scheduleRouteQueueDrain(ROUTE_SWITCH_DEBOUNCE_MS);
+    }
+
+    private void schedulePresentationRouteSwitch(AudioDeviceInfo targetDevice) {
+        if (targetDevice == null) return;
+        pendingPresentationRouteDevice = targetDevice;
+        pendingPresentationRouteTs = SystemClock.uptimeMillis();
+        scheduleRouteQueueDrain(ROUTE_SWITCH_DEBOUNCE_MS);
+    }
+
+    private void scheduleRouteQueueDrain(long baseDelayMs) {
+        uiHandler.removeCallbacks(applyRouteSwitchQueueRunnable);
+        long now = SystemClock.uptimeMillis();
+        long sinceLast = now - lastGlobalRouteApplyTs;
+        long delay = Math.max(0L, baseDelayMs);
+        if (routeSwitchInProgress) {
+            delay = Math.max(delay, 120L);
+        }
+        if (sinceLast < ROUTE_SWITCH_GLOBAL_INTERVAL_MS) {
+            delay = Math.max(delay, ROUTE_SWITCH_GLOBAL_INTERVAL_MS - sinceLast);
+        }
+        uiHandler.postDelayed(applyRouteSwitchQueueRunnable, delay);
+    }
+
+    private void drainRouteSwitchQueue() {
+        if (routeSwitchInProgress) {
+            scheduleRouteQueueDrain(120L);
+            return;
+        }
+        AudioDeviceInfo nextMain = pendingMainRouteDevice;
+        AudioDeviceInfo nextPresentation = pendingPresentationRouteDevice;
+        if (nextMain == null && nextPresentation == null) return;
+
+        routeSwitchInProgress = true;
+        try {
+            // Apply only one route change per cycle to avoid HAL reconfiguration storms
+            // when both players are active.
+            boolean chooseMain = nextPresentation == null
+                    || (nextMain != null && pendingMainRouteTs <= pendingPresentationRouteTs);
+            if (chooseMain && nextMain != null) {
+                pendingMainRouteDevice = null;
+                applyMainRouteSwitch(nextMain);
+            } else if (nextPresentation != null) {
+                pendingPresentationRouteDevice = null;
+                applyPresentationRouteSwitch(nextPresentation);
+            }
+            lastGlobalRouteApplyTs = SystemClock.uptimeMillis();
+        } finally {
+            routeSwitchInProgress = false;
+        }
+
+        if (pendingMainRouteDevice != null || pendingPresentationRouteDevice != null) {
+            scheduleRouteQueueDrain(ROUTE_SWITCH_GLOBAL_INTERVAL_MS);
+        }
+    }
+
+    private void togglePresentationPlayback(TextView buttonText) {
+        if (presentation == null || presentation.mediaPlayer == null) {
+            Toast.makeText(getApplicationContext(), "请选择副屏媒体文件", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (presentation.isPrimingOutput()) {
+            Toast.makeText(getApplicationContext(), "副屏通道预热中，请稍后再试", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        MediaPlayer player = presentation.mediaPlayer;
+        if (player.isPlaying()) {
+            player.pause();
+            buttonText.setText("播放");
+            return;
+        }
+
+        boolean mainWasPlaying = mediaPlayer != null && mediaPlayer.isPlaying();
+        try {
+            player.start();
+            buttonText.setText("暂停");
+            scheduleMainSyncNudge("presentation-start");
+            uiHandler.postDelayed(() -> {
+                try {
+                    if (mainWasPlaying && mediaPlayer != null && !mediaPlayer.isPlaying()) {
+                        mediaPlayer.start();
+                        scheduleMainSyncNudge("main-recovered-after-presentation-start");
+                    }
+                } catch (IllegalStateException e) {
+                    Log.e("AudioDevice", "副屏起播稳定化失败", e);
+                }
+            }, 220L);
+        } catch (IllegalStateException e) {
+            Log.e("AudioDevice", "副屏播放启动失败", e);
+            Toast.makeText(getApplicationContext(), "副屏播放失败，请重试", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void applyMainRouteSwitch(AudioDeviceInfo targetDevice) {
+        if (targetDevice == null || mediaPlayer == null) return;
         boolean wasPlaying = mediaPlayer.isPlaying();
-        setAudioDevice(selectedDevice);
+        setAudioDevice(targetDevice);
         if (wasPlaying && !mediaPlayer.isPlaying()) {
             try {
                 mediaPlayer.start();
             } catch (IllegalStateException e) {
                 Log.e("AudioDevice", "主屏恢复播放失败", e);
+            }
+        }
+    }
+
+    private void applyPresentationRouteSwitch(AudioDeviceInfo targetDevice) {
+        if (targetDevice == null || presentation == null || presentation.mediaPlayer == null) return;
+        boolean wasPlaying = presentation.mediaPlayer.isPlaying();
+        Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
+        presentation.setAudioDevice(targetDevice);
+        maybePrimePresentationOutput("route-switch");
+        if (wasPlaying && !presentation.mediaPlayer.isPlaying()) {
+            try {
+                presentation.mediaPlayer.start();
+            } catch (IllegalStateException e) {
+                Log.e("AudioDevice", "副屏恢复播放失败", e);
             }
         }
     }
@@ -739,6 +893,7 @@ public class MainActivity extends AppCompatActivity {
                                 presentation.initMediaPlayer(presentionselectedUri, presentationSurface);
                                 if (selectedDeviceCache != null) {
                                     presentation.setAudioDevice(selectedDeviceCache);
+                                    maybePrimePresentationOutput("file-selected");
                                 }
                             } else {
                                 Log.d("MediaPlayer", "副屏 Surface 未就绪，等待用户点击播放时兜底初始化");
@@ -793,8 +948,17 @@ public class MainActivity extends AppCompatActivity {
                 mediaPlayer.setSurface(surface);  // 兜底绑定 Surface
             }
             Log.d("MediaPlayer", "绑定Surface");
+            mediaPlayer.setOnInfoListener((mp, what, extra) -> {
+                if (what == MediaPlayer.MEDIA_INFO_AUDIO_NOT_PLAYING) {
+                    Log.w("MediaPlayer", "主屏检测到 AUDIO_NOT_PLAYING，尝试重新同步");
+                    scheduleMainSyncNudge("main-audio-not-playing");
+                    return true;
+                }
+                return false;
+            });
             mediaPlayer.setOnPreparedListener(mp -> {
                 Log.d("MediaPlayer", "播放器准备完毕");
+                applyMainSyncParams(mp, "main-prepared");
                 // 恢复播放状态
                 Log.d("MediaPlayer", "准备恢复restorePlaybackState");
                 restorePlaybackState();
@@ -886,10 +1050,40 @@ public class MainActivity extends AppCompatActivity {
         if (success) {
             isAudioDeviceSet = true;  // 设置成功，标志位为 true
             Log.d("AudioDevice", "已设置音频输出为: " + getDeviceTypeName(selectedDevice.getType()));
+            applyMainSyncParams(mediaPlayer, "main-route-updated");
         } else {
             isAudioDeviceSet = false;  // 设置失败，标志位为 false
             Log.d("AudioDevice", "设置设备失败");
         }
+    }
+
+    private void applyMainSyncParams(MediaPlayer player, String reason) {
+        if (player == null) return;
+        try {
+            SyncParams syncParams = new SyncParams()
+                    .allowDefaults()
+                    .setSyncSource(SyncParams.SYNC_SOURCE_SYSTEM_CLOCK)
+                    .setAudioAdjustMode(SyncParams.AUDIO_ADJUST_MODE_RESAMPLE);
+            player.setSyncParams(syncParams);
+            Log.d("MediaPlayer", "主屏 SyncParams 应用成功: " + reason);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Log.w("MediaPlayer", "主屏 SyncParams 应用失败: " + reason, e);
+        }
+    }
+
+    private void scheduleMainSyncNudge(String reason) {
+        uiHandler.postDelayed(() -> applyMainSyncParams(mediaPlayer, reason), 120L);
+    }
+
+    private void maybePrimePresentationOutput(String reason) {
+        if (presentation == null || presentation.mediaPlayer == null) return;
+        if (presentation.mediaPlayer.isPlaying()) return;
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            Log.d("AudioDevice", "主屏正在播放，跳过副屏预热: " + reason);
+            return;
+        }
+        boolean primed = presentation.primeOutputForSmoothStart();
+        Log.d("AudioDevice", "副屏预热请求(" + reason + "): " + primed);
     }
 
 
@@ -978,6 +1172,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private AudioDeviceInfo resolveDefaultDevice(List<AudioDeviceInfo> devices, AudioDeviceInfo preferred) {
+        if (devices == null || devices.isEmpty()) return null;
+        if (preferred != null) {
+            for (AudioDeviceInfo info : devices) {
+                if (info.getId() == preferred.getId()) {
+                    return info;
+                }
+            }
+        }
+        return devices.get(0);
+    }
+
+    private int findDeviceIndex(List<AudioDeviceInfo> devices, AudioDeviceInfo target) {
+        if (devices == null || target == null) return -1;
+        for (int i = 0; i < devices.size(); i++) {
+            if (devices.get(i).getId() == target.getId()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
 
     private void refreshAudioDeviceList() {
         // 清空“用户触发”标志，防止 setAdapter 触发的程序性回调误执行重路由
@@ -1033,6 +1249,30 @@ public class MainActivity extends AppCompatActivity {
         });
 
         OutputDevices = Arrays.asList(mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
+        AudioDeviceInfo defaultMainDevice = resolveDefaultDevice(OutputDevices, selectedDevice);
+        AudioDeviceInfo preferredPresentationDevice =
+                (presentation != null && presentation.selectedDevice != null)
+                        ? presentation.selectedDevice
+                        : selectedDeviceCache;
+        AudioDeviceInfo defaultPresentationDevice = resolveDefaultDevice(OutputDevices, preferredPresentationDevice);
+
+        selectedDevice = defaultMainDevice;
+        selectedDeviceCache = defaultPresentationDevice;
+        isAudioDeviceSet = (selectedDevice != null);
+        device = (selectedDeviceCache != null) ? selectedDeviceCache : 0;
+
+        if (presentation != null) {
+            presentation.selectedDevice = selectedDeviceCache;
+            presentation.isAudioDeviceSet = (selectedDeviceCache != null);
+        }
+
+        if (mediaPlayer != null && selectedDevice != null) {
+            setAudioDevice(selectedDevice);
+        }
+        if (presentation != null && presentation.mediaPlayer != null && selectedDeviceCache != null) {
+            presentation.setAudioDevice(selectedDeviceCache);
+        }
+
         for (AudioDeviceInfo device : OutputDevices) {
             String deviceTypeName = getDeviceTypeName(device.getType());
             deviceNames.add(deviceTypeName);
@@ -1045,6 +1285,14 @@ public class MainActivity extends AppCompatActivity {
 
         mAudioDevicesSpinner1.setAdapter(adapter);
         mAudioDevicesSpinner2.setAdapter(adapter);
+        int mainIndex = findDeviceIndex(OutputDevices, selectedDevice);
+        if (mainIndex >= 0) {
+            mAudioDevicesSpinner1.setSelection(mainIndex, false);
+        }
+        int presentationIndex = findDeviceIndex(OutputDevices, selectedDeviceCache);
+        if (presentationIndex >= 0) {
+            mAudioDevicesSpinner2.setSelection(presentationIndex, false);
+        }
 
         mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -1088,6 +1336,12 @@ public class MainActivity extends AppCompatActivity {
             isFullScreen = false;
             applyInlineFullScreen(false);
         }
+        uiHandler.removeCallbacks(applyRouteSwitchQueueRunnable);
+        pendingMainRouteDevice = null;
+        pendingPresentationRouteDevice = null;
+        routeSwitchInProgress = false;
+        uiHandler.removeCallbacks(restoreSystemStreamRunnable);
+        restoreSystemUiSoundEffects();
         super.onStop();
         if (fullScreenDialog != null && fullScreenDialog.isShowing()) {
             fullScreenDialog.dismiss();
