@@ -1,8 +1,10 @@
 package com.example.dualscreenandsound;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.hardware.display.DisplayManager;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
@@ -10,18 +12,24 @@ import android.media.AudioSystem;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Display;
+import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -43,8 +51,11 @@ public class MainActivity extends AppCompatActivity {
     private boolean isVideoPlaying= false;  // 用来追踪视频是否正在播放
     private MediaPlayer mediaPlayer;
     private SurfaceView surfaceView;
+    private FrameLayout surfaceContainer;
+    private ScrollView scrollView;
+    private Button btnFullScreen, btnMainPlay;
     private List<AudioDeviceInfo> OutputDevices;
-    private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2, displaySpinner;;
+    private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2, displaySpinner;
     private String selectedFilePath,selectedPresentionFilePath,previousMainScreenFilePath, previousPresentationFilePath= "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
@@ -66,6 +77,32 @@ public class MainActivity extends AppCompatActivity {
 
     private int selectedDisplayId;
     private Object device = 0;
+
+    private boolean isFullScreen = false;
+    private Dialog fullScreenDialog;
+    private SurfaceView fullScreenSurfaceView;
+    private Surface fullScreenSurface;
+    private boolean keepPlayingAcrossSurfaceSwitch = false;
+    private SurfaceHolder mainSurfaceHolder;
+    private SurfaceHolder fullScreenSurfaceHolder;
+    private boolean pendingAttachToMainSurface = false;
+    private ViewGroup controlsLayout;
+    private final List<View> nonPlayerViews = new ArrayList<>();
+    private int inlineOriginalSurfaceHeight = -1;
+    private int inlineOriginalSurfaceTopMargin = 0;
+    private boolean inlineOriginalPaddingCaptured = false;
+    private int inlineOriginalPaddingLeft = 0;
+    private int inlineOriginalPaddingTop = 0;
+    private int inlineOriginalPaddingRight = 0;
+    private int inlineOriginalPaddingBottom = 0;
+    private int inlineOriginalControlsLayoutHeight = ViewGroup.LayoutParams.WRAP_CONTENT;
+    private boolean wasPlayingBeforeFullScreen = false;
+    private boolean mainAudioSpinnerTouched = false;
+    private boolean presentationAudioSpinnerTouched = false;
+    private boolean displaySpinnerTouched = false;
+    private long mainAudioSpinnerTouchTs = 0L;
+    private long presentationAudioSpinnerTouchTs = 0L;
+    private long displaySpinnerTouchTs = 0L;
 
     private class DisplayItem {
         String displayName;
@@ -89,34 +126,41 @@ public class MainActivity extends AppCompatActivity {
         displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
 
         setupDisplayListener();
-//        initializePresentation();
 
         surfaceView = findViewById(R.id.surfaceView);  // SurfaceView 用于显示视频
-        surface = surfaceView.getHolder().getSurface();
+        surfaceContainer = findViewById(R.id.surfaceContainer);
+        scrollView = findViewById(R.id.scrollView);
+        btnFullScreen = findViewById(R.id.btn_fullscreen);
+        btnMainPlay = findViewById(R.id.btn_displaymanager);
+        controlsLayout = findViewById(R.id.controlsLayout);
+        cacheNonPlayerViews();
+
         surfaceHolder = surfaceView.getHolder();
-        // SurfaceHolder.Callback 用来处理 Surface 创建和销毁
+        // SurfaceHolder.Callback 用来处理 Surface 创建 and 销毁
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
                 Log.d("MediaPlayer", "准备初始化MediaPlayer或者presentation.MediaPlayer");
+                surface = holder.getSurface();
+                mainSurfaceHolder = holder;
                 // Surface 创建后，可以初始化播放器
                 if (selectedUri != null) {
-                    initMediaPlayer(selectedUri, holder.getSurface());
-                    setAudioDevice(selectedDevice);
-                }
-                if (presentation != null) {
-                    if (presentionselectedUri != null) {
-                        presentation.initMediaPlayer(presentionselectedUri,presentation.surface);  // 直接传递Uri给MediaPlayer
+                    boolean createdMainPlayer = false;
+                    if (mediaPlayer == null) {
+                        initMediaPlayer(selectedUri, holder.getSurface());
+                        createdMainPlayer = true;
                     } else {
-                        Log.d("MediaPlayer", "请选择副屏文件");
+                        switchMainPlayerSurface(holder, isFullScreen ? "全屏主 Surface" : "主界面 Surface");
+                        pendingAttachToMainSurface = false;
                     }
-                    if (selectedDeviceCache != null) {
-                        presentation.setAudioDevice(selectedDeviceCache);
-                    } else {
-                        Log.d("MediaPlayer", "selectedDeviceCacheh is null");
+                    // Avoid re-routing audio on every surface recreation (fullscreen/layout),
+                    // which may cause short audio interruption.
+                    if (createdMainPlayer && selectedDevice != null) {
+                        setAudioDevice(selectedDevice);
                     }
-                }else{
-                    Log.d("MediaPlayer", "请连接副屏");
+                } else if (mediaPlayer != null && pendingAttachToMainSurface) {
+                    switchMainPlayerSurface(holder, "主界面 Surface(延迟恢复)");
+                    pendingAttachToMainSurface = false;
                 }
             }
 
@@ -128,19 +172,11 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void surfaceDestroyed(SurfaceHolder holder) {
                 Log.d("MediaPlayer", "准备获取当前播放位置");
+                surface = null;
+                mainSurfaceHolder = null;
+                keepPlayingAcrossSurfaceSwitch = mediaPlayer != null && mediaPlayer.isPlaying();
                 // 在Surface销毁时保存当前播放状态
                 savePlaybackState(); // 保存MediaPlayer播放状态
-                presentation.savePlaybackState();
-
-                Log.d("MediaPlayer", "准备释放releaseMediaPlayer");
-                // 在 Surface 销毁时释放播放器资源
-                if (mediaPlayer != null ) {
-                    releaseMediaPlayer(); // 释放资源
-                }
-                // 增加对 presentation 是否为 null 的检查
-                if (presentation != null && presentation.mediaPlayer != null) {
-                    presentation.releaseMediaPlayer(); // 释放 presentation 的播放器资源
-                }
             }
         });
 
@@ -151,12 +187,33 @@ public class MainActivity extends AppCompatActivity {
         mAudioDevicesSpinner1 = findViewById(R.id.spinner_audio_devices);
         mAudioDevicesSpinner2 = findViewById(R.id.spinner_audio_presentation_devices);
         displaySpinner = findViewById(R.id.displaySpinner);
+        mAudioDevicesSpinner1.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                mainAudioSpinnerTouched = true;
+                mainAudioSpinnerTouchTs = SystemClock.uptimeMillis();
+            }
+            return false;
+        });
+        mAudioDevicesSpinner2.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                presentationAudioSpinnerTouched = true;
+                presentationAudioSpinnerTouchTs = SystemClock.uptimeMillis();
+            }
+            return false;
+        });
+        displaySpinner.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                displaySpinnerTouched = true;
+                displaySpinnerTouchTs = SystemClock.uptimeMillis();
+            }
+            return false;
+        });
         refreshAudioDeviceList();
 
         /********************
          添加主副屏视频播放的按钮
          *********************/
-        Button btn1 = findViewById(R.id.btn_displaymanager);
+        Button btn1 = btnMainPlay;
         Button btn2 = findViewById(R.id.btn_presentation_displaymanager);
         // btn1 的点击事件
         btn1.setOnClickListener(new View.OnClickListener() {
@@ -172,9 +229,29 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 if (presentation != null) {
                     Log.d("Display", "Initializing presentation for display ID: " + selectedDisplayId);
-                    // presentation 不为空时调用通用播放控制方法
-                    presentation.isAudioDeviceSet = true;
-                    toggleMediaPlayer(presentation.mediaPlayer, presentation.isAudioDeviceSet, btn2);
+                    if (presentionselectedUri == null) {
+                        Toast.makeText(getApplicationContext(), "请选择副屏媒体文件", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (presentation.mediaPlayer == null) {
+                        Surface presentationSurface = getPresentationSurface();
+                        if (presentationSurface != null && presentationSurface.isValid()) {
+                            presentation.initMediaPlayer(presentionselectedUri, presentationSurface);
+                            if (selectedDeviceCache != null) {
+                                presentation.setAudioDevice(selectedDeviceCache);
+                            }
+                            Toast.makeText(getApplicationContext(), "副屏播放器初始化中，请再点击一次播放", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(getApplicationContext(), "副屏画面未就绪，请稍后重试", Toast.LENGTH_SHORT).show();
+                        }
+                        return;
+                    }
+                    presentation.isAudioDeviceSet = (presentation.selectedDevice != null || selectedDeviceCache != null);
+                    if (!presentation.isAudioDeviceSet) {
+                        Toast.makeText(getApplicationContext(), "请选择副屏音频通道", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    toggleMediaPlayer(presentation.mediaPlayer, true, btn2);
                 } else {
                     Toast.makeText(getApplicationContext(), "请连接副屏", Toast.LENGTH_SHORT).show();
                 }
@@ -189,15 +266,11 @@ public class MainActivity extends AppCompatActivity {
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> handleFileResult(result, false));
 
-        // 确保 presentation.selectFileLauncher 被初始化
-
         if (selectFileLauncherCache == null) {
             selectFileLauncherCache = registerForActivityResult(
                     new ActivityResultContracts.StartActivityForResult(),
                     result -> handleFileResult(result, true));
             Log.d("AudioDevice", "注册presentation.selectFileLauncher");
-        }else{
-            Log.d("AudioDevice", "presentation.selectFileLauncher为空");
         }
 
         // 按钮点击事件，打开文件选择器
@@ -213,7 +286,311 @@ public class MainActivity extends AppCompatActivity {
                 }
         });
 
+        // 全屏逻辑：同一 Surface 原地全屏，避免切换 Surface 引发黑屏/ANR
+        btnFullScreen.setOnClickListener(v -> {
+            if (isFullScreen) {
+                exitFullScreen();
+            } else {
+                enterFullScreen();
+            }
+        });
 
+        // Disable UI click/haptic effects to avoid system touch-sound tracks
+        // reconfiguring HDMI route during fullscreen toggle on some HALs.
+        disableInteractionSoundEffects(
+                btnMainPlay,
+                btn2,
+                selectFileButton,
+                selectPrensentionFileButton,
+                btnFullScreen,
+                mAudioDevicesSpinner1,
+                mAudioDevicesSpinner2,
+                displaySpinner
+        );
+    }
+
+    private void disableInteractionSoundEffects(View... views) {
+        if (views == null) return;
+        for (View view : views) {
+            if (view == null) continue;
+            view.setSoundEffectsEnabled(false);
+            view.setHapticFeedbackEnabled(false);
+        }
+    }
+
+    private Surface getPresentationSurface() {
+        if (presentation == null) return null;
+        if (presentation.surfaceView != null && presentation.surfaceView.getHolder() != null) {
+            Surface surface = presentation.surfaceView.getHolder().getSurface();
+            if (surface != null) {
+                return surface;
+            }
+        }
+        return presentation.surface;
+    }
+
+    private void enterFullScreen() {
+        if (isFullScreen) return;
+        if (mediaPlayer == null) {
+            Toast.makeText(getApplicationContext(), "请先播放主屏视频", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        wasPlayingBeforeFullScreen = mediaPlayer.isPlaying();
+        isFullScreen = true;
+        applyInlineFullScreen(true);
+    }
+
+    private void exitFullScreen() {
+        if (!isFullScreen) return;
+        isFullScreen = false;
+        applyInlineFullScreen(false);
+        if (mediaPlayer != null && wasPlayingBeforeFullScreen && !mediaPlayer.isPlaying()) {
+            try {
+                mediaPlayer.start();
+            } catch (IllegalStateException ignored) {
+            }
+        }
+    }
+
+    private void cacheNonPlayerViews() {
+        if (!(controlsLayout instanceof ViewGroup) || !nonPlayerViews.isEmpty()) return;
+        ViewGroup group = controlsLayout;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child.getId() != R.id.surfaceContainer) {
+                nonPlayerViews.add(child);
+            }
+        }
+    }
+
+    private void applyInlineFullScreen(boolean enable) {
+        cacheNonPlayerViews();
+        ViewGroup.LayoutParams params = surfaceContainer.getLayoutParams();
+        if (!(params instanceof ViewGroup.MarginLayoutParams)) {
+            return;
+        }
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) params;
+
+        if (enable) {
+            if (inlineOriginalSurfaceHeight < 0) {
+                inlineOriginalSurfaceHeight = lp.height;
+                inlineOriginalSurfaceTopMargin = lp.topMargin;
+            }
+            if (controlsLayout != null && !inlineOriginalPaddingCaptured) {
+                inlineOriginalPaddingLeft = controlsLayout.getPaddingLeft();
+                inlineOriginalPaddingTop = controlsLayout.getPaddingTop();
+                inlineOriginalPaddingRight = controlsLayout.getPaddingRight();
+                inlineOriginalPaddingBottom = controlsLayout.getPaddingBottom();
+                inlineOriginalPaddingCaptured = true;
+                ViewGroup.LayoutParams controlsParams = controlsLayout.getLayoutParams();
+                if (controlsParams != null) {
+                    inlineOriginalControlsLayoutHeight = controlsParams.height;
+                }
+            }
+            for (View view : nonPlayerViews) {
+                view.setVisibility(View.GONE);
+            }
+            if (controlsLayout != null) {
+                controlsLayout.setPadding(0, 0, 0, 0);
+            }
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().hide();
+            }
+            scrollView.setFillViewport(true);
+
+            View root = findViewById(R.id.rootLayout);
+            int targetHeight = root != null ? root.getHeight() : 0;
+            if (scrollView != null) {
+                targetHeight = Math.max(targetHeight, scrollView.getHeight());
+            }
+            View decor = getWindow().getDecorView();
+            if (decor != null) {
+                targetHeight = Math.max(targetHeight, decor.getHeight());
+            }
+            if (targetHeight <= 0) {
+                targetHeight = getResources().getDisplayMetrics().heightPixels;
+            }
+
+            if (controlsLayout != null) {
+                ViewGroup.LayoutParams controlsParams = controlsLayout.getLayoutParams();
+                if (controlsParams != null) {
+                    controlsParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                    controlsLayout.setLayoutParams(controlsParams);
+                }
+            }
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.topMargin = 0;
+            surfaceContainer.setLayoutParams(lp);
+            btnFullScreen.setText("退出全屏");
+            applyImmersiveMode(getWindow());
+            scrollView.post(() -> scrollView.fullScroll(View.FOCUS_UP));
+        } else {
+            for (View view : nonPlayerViews) {
+                view.setVisibility(View.VISIBLE);
+            }
+            if (controlsLayout != null && inlineOriginalPaddingCaptured) {
+                controlsLayout.setPadding(
+                        inlineOriginalPaddingLeft,
+                        inlineOriginalPaddingTop,
+                        inlineOriginalPaddingRight,
+                        inlineOriginalPaddingBottom);
+            }
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().show();
+            }
+            scrollView.setFillViewport(true);
+            if (inlineOriginalSurfaceHeight > 0) {
+                lp.height = inlineOriginalSurfaceHeight;
+            }
+            lp.topMargin = inlineOriginalSurfaceTopMargin;
+            surfaceContainer.setLayoutParams(lp);
+            if (controlsLayout != null) {
+                ViewGroup.LayoutParams controlsParams = controlsLayout.getLayoutParams();
+                if (controlsParams != null) {
+                    controlsParams.height = inlineOriginalControlsLayoutHeight;
+                    controlsLayout.setLayoutParams(controlsParams);
+                }
+            }
+            scrollView.setVisibility(View.VISIBLE);
+            if (btnMainPlay != null) {
+                btnMainPlay.setVisibility(View.VISIBLE);
+            }
+            btnFullScreen.setText("全屏");
+            clearImmersiveMode();
+            scrollView.post(() -> scrollView.fullScroll(View.FOCUS_UP));
+        }
+    }
+
+    private void ensureFullScreenDialog() {
+        if (fullScreenDialog != null) return;
+
+        fullScreenDialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+
+        fullScreenSurfaceView = new SurfaceView(this);
+        FrameLayout.LayoutParams surfaceLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
+        root.addView(fullScreenSurfaceView, surfaceLp);
+
+        Button closeButton = new Button(this);
+        closeButton.setText("退出全屏");
+        closeButton.setAlpha(0.85f);
+        closeButton.setOnClickListener(v -> exitFullScreen());
+        FrameLayout.LayoutParams closeLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        closeLp.gravity = Gravity.TOP | Gravity.END;
+        int margin = (int) (16 * getResources().getDisplayMetrics().density);
+        closeLp.topMargin = margin;
+        closeLp.rightMargin = margin;
+        root.addView(closeButton, closeLp);
+
+        fullScreenDialog.setContentView(root);
+        fullScreenDialog.setCanceledOnTouchOutside(false);
+        fullScreenDialog.setOnShowListener(dialog -> applyImmersiveMode(fullScreenDialog.getWindow()));
+        fullScreenDialog.setOnDismissListener(dialog -> {
+            isFullScreen = false;
+            restoreInlinePlayerSurfaceAndUi();
+        });
+
+        Window window = fullScreenDialog.getWindow();
+        if (window != null) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        }
+
+        fullScreenSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                fullScreenSurfaceHolder = holder;
+                fullScreenSurface = holder.getSurface();
+                if (isFullScreen) {
+                    switchMainPlayerSurface(holder, "全屏 Dialog Surface");
+                }
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                // no-op
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                fullScreenSurfaceHolder = null;
+                fullScreenSurface = null;
+            }
+        });
+    }
+
+    private void restoreInlinePlayerSurfaceAndUi() {
+        scrollView.setVisibility(View.VISIBLE);
+        scrollView.post(() -> scrollView.fullScroll(View.FOCUS_UP));
+        if (btnMainPlay != null) {
+            btnMainPlay.setVisibility(View.VISIBLE);
+        }
+        View controlsLayout = findViewById(R.id.controlsLayout);
+        if (controlsLayout != null) {
+            controlsLayout.setVisibility(View.VISIBLE);
+        }
+        btnFullScreen.setVisibility(View.VISIBLE);
+        clearImmersiveMode();
+        if (mainSurfaceHolder != null && surface != null && surface.isValid()) {
+            switchMainPlayerSurface(mainSurfaceHolder, "主界面 Surface");
+            pendingAttachToMainSurface = false;
+        } else {
+            pendingAttachToMainSurface = true;
+        }
+    }
+
+    private void switchMainPlayerSurface(SurfaceHolder targetHolder, String targetName) {
+        if (mediaPlayer == null || targetHolder == null) return;
+        try {
+            mediaPlayer.setDisplay(targetHolder);
+            Surface targetSurface = targetHolder.getSurface();
+            if (targetSurface != null && targetSurface.isValid()
+                    && keepPlayingAcrossSurfaceSwitch && !mediaPlayer.isPlaying()) {
+                mediaPlayer.start();
+            }
+            Log.d("MediaPlayer", "切换渲染目标到: " + targetName);
+        } catch (IllegalStateException e) {
+            Log.e("MediaPlayer", "切换 Surface 失败: " + targetName, e);
+        } finally {
+            Surface targetSurface = targetHolder.getSurface();
+            if (targetSurface != null && targetSurface.isValid()) {
+                keepPlayingAcrossSurfaceSwitch = false;
+            }
+        }
+    }
+
+    private void applyImmersiveMode(Window window) {
+        if (window == null) return;
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        View decorView = window.getDecorView();
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
+    private void clearImmersiveMode() {
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (isFullScreen || (fullScreenDialog != null && fullScreenDialog.isShowing())) {
+            exitFullScreen();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     // 用于处理播放和暂停的通用方法
@@ -237,6 +614,7 @@ public class MainActivity extends AppCompatActivity {
 
     // 通用方法：设置音频设备并恢复播放状态
     private void handleAudioDeviceSelection(AdapterView<?> parentView, View selectedItemView, int position, long id, boolean isPresentation) {
+        if (OutputDevices == null || position >= OutputDevices.size()) return;
         device = OutputDevices.get(position);
 
         // 处理音频设备选择和播放状态恢复
@@ -253,50 +631,70 @@ public class MainActivity extends AppCompatActivity {
             Log.d("AudioDevice", "请连接副屏");
             return;
         }
-        presentation.selectedDevice = (AudioDeviceInfo) device;
+        AudioDeviceInfo newDevice = (AudioDeviceInfo) device;
+        if (presentation.selectedDevice != null && newDevice != null
+                && presentation.selectedDevice.getId() == newDevice.getId()) {
+            Log.d("AudioDevice", "副屏音频设备未变化，跳过重路由");
+            return;
+        }
+        presentation.selectedDevice = newDevice;
         Log.d("AudioDevice", "选中的设备信息：");
-        Log.d("AudioDevice", "设备ID: " + selectedDevice.getId());
-        Log.d("AudioDevice", "设备名称: " + selectedDevice.getProductName());
-        Log.d("AudioDevice", "设备类型: " + selectedDevice.getType());
+        if (selectedDevice != null) {
+            Log.d("AudioDevice", "设备ID: " + selectedDevice.getId());
+            Log.d("AudioDevice", "设备名称: " + selectedDevice.getProductName());
+            Log.d("AudioDevice", "设备类型: " + selectedDevice.getType());
+        }
         if (presentation.selectedDevice != null) {
             selectedDeviceCache = presentation.selectedDevice;
-        }else{
-            Log.d("AudioDevice", "presentation.selectedDevice为空，所以没有传递给selectedDeviceCache");
         }
 
         if (selectedPresentionFilePath == null || selectedPresentionFilePath.isEmpty()) {
             Log.d("AudioDevice", "请选择文件");
             return;
         }
-        //切换前最好暂停一下
-        pauseMediaPlayerIfPlaying(presentation.mediaPlayer);  // 如果正在播放，暂停
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
-                presentation. setAudioDevice(selectedDeviceCache);
-//                resumeMediaPlayerIfPlaying(presentation.mediaPlayer);  // 恢复播放
+        if (presentation.mediaPlayer == null) {
+            Log.d("AudioDevice", "副屏播放器未初始化，跳过设置");
+            return;
+        }
+        boolean wasPlaying = presentation.mediaPlayer.isPlaying();
+        Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
+        presentation.setAudioDevice(selectedDeviceCache);
+        if (wasPlaying && !presentation.mediaPlayer.isPlaying()) {
+            try {
+                presentation.mediaPlayer.start();
+            } catch (IllegalStateException e) {
+                Log.e("AudioDevice", "副屏恢复播放失败", e);
             }
-        }, 500);  // 延迟 0.5 秒
+        }
     }
 
     // 处理普通音频设备选择的方法
     private void handleDeviceSelectionForAudio(Object device) {
-        selectedDevice = (AudioDeviceInfo) device;
+        AudioDeviceInfo newDevice = (AudioDeviceInfo) device;
+        if (selectedDevice != null && newDevice != null
+                && selectedDevice.getId() == newDevice.getId()) {
+            Log.d("AudioDevice", "主屏音频设备未变化，跳过重路由");
+            return;
+        }
+        selectedDevice = newDevice;
         Log.d("AudioDevice", "handleDeviceSelectionForAudio 拿到的Selected Device: " + selectedDevice);
         if (selectedFilePath == null || selectedFilePath.isEmpty()) {
             Log.d("AudioDevice", "请选择文件");
             return;
         }
-        //切换前最好暂停一下
-        pauseMediaPlayerIfPlaying(mediaPlayer);  // 如果正在播放，暂停
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                setAudioDevice(selectedDevice);
-//                resumeMediaPlayerIfPlaying(mediaPlayer);  // 恢复播放
+        if (mediaPlayer == null) {
+            Log.d("AudioDevice", "主屏播放器未初始化，跳过设置");
+            return;
+        }
+        boolean wasPlaying = mediaPlayer.isPlaying();
+        setAudioDevice(selectedDevice);
+        if (wasPlaying && !mediaPlayer.isPlaying()) {
+            try {
+                mediaPlayer.start();
+            } catch (IllegalStateException e) {
+                Log.e("AudioDevice", "主屏恢复播放失败", e);
             }
-        }, 500);  // 延迟 0.5 秒
+        }
     }
 
     //打开文件管理器的通用方法
@@ -325,7 +723,6 @@ public class MainActivity extends AppCompatActivity {
                         // 判断是否为新的视频文件
                         if (!filePath.equals(previousPresentationFilePath)) {
                             Log.d("PresentationFilePath", "选择了新的视频文件: " + selectedPresentionFilePath);
-                            // 如果是新文件，可以做一些额外操作，比如恢复播放进度等
                             isSwitchingToNewVideo = true;
                         } else {
                             Log.d("PresentationFilePath", "选择的是同一个视频文件");
@@ -336,6 +733,17 @@ public class MainActivity extends AppCompatActivity {
 
                         // 更新副屏的 previousFilePath
                         previousPresentationFilePath = filePath;
+                        if (presentation != null) {
+                            Surface presentationSurface = getPresentationSurface();
+                            if (presentationSurface != null && presentationSurface.isValid()) {
+                                presentation.initMediaPlayer(presentionselectedUri, presentationSurface);
+                                if (selectedDeviceCache != null) {
+                                    presentation.setAudioDevice(selectedDeviceCache);
+                                }
+                            } else {
+                                Log.d("MediaPlayer", "副屏 Surface 未就绪，等待用户点击播放时兜底初始化");
+                            }
+                        }
                     } else {
                         selectedUri = toggleSelectedUri; // 保存主屏文件的 URI
                         selectedFilePath = filePath;
@@ -343,7 +751,6 @@ public class MainActivity extends AppCompatActivity {
                         // 判断是否为新的视频文件
                         if (!filePath.equals(previousMainScreenFilePath)) {
                             Log.d("SelectedFilePath", "选择了新的视频文件: " + selectedFilePath);
-                            // 如果是新文件，可以做一些额外操作，比如恢复播放进度等
                             isSwitchingToNewVideo = true;
                         } else {
                             Log.d("SelectedFilePath", "选择的是同一个视频文件");
@@ -366,19 +773,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 判断并暂停播放MediaPlayer的通用方法
-    private void pauseMediaPlayerIfPlaying(MediaPlayer player) {
-        if (player != null && player.isPlaying()) {
-            player.pause();  // 暂停播放器
-        }
-    }
-
-    // 恢复播放MediaPlayer的通用方法
-    private void resumeMediaPlayerIfPlaying(MediaPlayer player) {
-        if (player != null && !player.isPlaying()) {
-            player.start();  // 恢复播放
-        }
-    }
     // 初始化 MediaPlayer的通用方法
     private void initMediaPlayer(Uri fileUri, Surface surface) {
         try {
@@ -393,7 +787,11 @@ public class MainActivity extends AppCompatActivity {
             // 设置数据源为本地视频文件的路径
             mediaPlayer.setDataSource(this, fileUri);
             Log.d("MediaPlayer", "设置数据源");
-            mediaPlayer.setSurface(surface);  // 绑定Surface
+            if (mainSurfaceHolder != null) {
+                mediaPlayer.setDisplay(mainSurfaceHolder);
+            } else {
+                mediaPlayer.setSurface(surface);  // 兜底绑定 Surface
+            }
             Log.d("MediaPlayer", "绑定Surface");
             mediaPlayer.setOnPreparedListener(mp -> {
                 Log.d("MediaPlayer", "播放器准备完毕");
@@ -452,7 +850,6 @@ public class MainActivity extends AppCompatActivity {
                     mediaPlayer.start();
                 }
             } catch (IllegalStateException e) {
-                // 处理可能的错误
                 e.printStackTrace();
             }
         }
@@ -484,6 +881,7 @@ public class MainActivity extends AppCompatActivity {
 
     // 设置音频设备
     private void setAudioDevice(AudioDeviceInfo selectedDevice){
+        if (mediaPlayer == null || selectedDevice == null) return;
         boolean success = mediaPlayer.setPreferredDevice(selectedDevice);
         if (success) {
             isAudioDeviceSet = true;  // 设置成功，标志位为 true
@@ -502,42 +900,31 @@ public class MainActivity extends AppCompatActivity {
         displayManager.registerDisplayListener(new DisplayManager.DisplayListener() {
             @Override
             public void onDisplayAdded(int displayId) {
-                // 副屏添加时重新初始化 presentation
                 Log.d("AudioDevice", "Display added: " + displayId);
                 Display  display = displayManager.getDisplay(displayId);
                 if (display != null && display.getDisplayId() != Display.DEFAULT_DISPLAY) {
-                    // 更新副屏列表并刷新 Spinner
                     refreshAudioDeviceList();
-//                    initializePresentation();
                 }
-
-                // 刷新音频设备列表
-                Log.d("AudioDevice", "onDisplayAdded刷新音频设备列表");
             }
             @Override
             public void onDisplayChanged(int displayId) {
-                // 副屏发生变化时，可能需要更新 display 或者重新初始化 presentation
                 Log.d("AudioDevice", "Display changed: " + displayId);
-                 refreshAudioDeviceList();
+                // Avoid refreshing adapters here; frequent display config callbacks
+                // can trigger unnecessary UI churn and accidental audio re-routing.
             }
             @Override
             public void onDisplayRemoved(int displayId) {
-                // 副屏移除时，隐藏或销毁 presentation
                 if (presentation != null && presentation.getDisplay().getDisplayId() == displayId) {
                     Log.d("AudioDevice", "Display removed: " + displayId);
                     if (presentation.surface != null ) {
-                        Log.d("MediaPlayer", "释放 surface");
                         if (presentation.mediaPlayer != null && presentation.mediaPlayer.isPlaying()) {
                             presentation.mediaPlayer.pause();
-                            Log.d("MediaPlayer", "暂停 surface");
                         }
                         presentation.releaseMediaPlayer();
                     }
                     presentation.dismiss();
                     presentation = null;
                 }
-                // 刷新音频设备列表
-                Log.d("AudioDevice", "onDisplayRemoved刷新音频设备列表");
                 refreshAudioDeviceList();
             }
         }, null);
@@ -548,31 +935,18 @@ public class MainActivity extends AppCompatActivity {
 
         if (allDisplays != null && allDisplays.length > 0) {
             for (Display display : allDisplays) {
-                Log.d("Display", "Found display with ID: " + display.getDisplayId());
+                if (display.getDisplayId() == 0) continue;
 
-                // 跳过主屏（ID 为 0）
-                if (display.getDisplayId() == 0) {
-                    Log.d("AudioDevice", "Skipping main display with ID 0");
-                    continue;
-                }
-
-                // 如果是目标副屏，则进行处理
                 if (display.getDisplayId() == displayId) {
-                    // 如果没有找到现有的 presentation，创建新的
                     if (!presentationMap.containsKey(displayId)) {
-                        Log.d("AudioDevice", "Creating new presentation on display ID: " + displayId);
                         MyPresentation newPresentation = new MyPresentation(this, display);
                         presentationMap.put(displayId, newPresentation);
                         newPresentation.show();
-
                     }
-                    presentation = presentationMap.get(selectedDisplayId);//将控制的实例与选择的副屏联系起来
-                    Log.d("AudioDevice", "Current presentation set to display ID: " + displayId);
-                    return; // 一旦找到目标副屏并处理完，退出循环
+                    presentation = presentationMap.get(displayId);
+                    return;
                 }
             }
-        } else {
-            Log.d("AudioDevice", "displays = NULL");
         }
     }
 
@@ -583,8 +957,6 @@ public class MainActivity extends AppCompatActivity {
                 return AudioSystem.DEVICE_OUT_SPEAKER_NAME;
             case AudioDeviceInfo.TYPE_HDMI:
                 return AudioSystem.DEVICE_OUT_HDMI_NAME;
-//            case AudioDeviceInfo.TYPE_HDMI_1:
-//                return AudioSystem.DEVICE_OUT_HDMI1_NAME;
             case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
                 return "蓝牙音频设备";
             case AudioDeviceInfo.TYPE_WIRED_HEADPHONES:
@@ -601,8 +973,6 @@ public class MainActivity extends AppCompatActivity {
                 return "蓝牙语音设备";
             case AudioDeviceInfo.TYPE_LINE_DIGITAL:
                 return AudioSystem.DEVICE_OUT_SPDIF_NAME;
-//            case AudioDeviceInfo.TYPE_LINE_DIGITAL_1:
-//                return AudioSystem.DEVICE_OUT_SPDIF1_NAME;
             default:
                 return "未知设备类型";
         }
@@ -610,15 +980,19 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void refreshAudioDeviceList() {
-
+        // 清空“用户触发”标志，防止 setAdapter 触发的程序性回调误执行重路由
+        mainAudioSpinnerTouched = false;
+        presentationAudioSpinnerTouched = false;
+        displaySpinnerTouched = false;
+        mainAudioSpinnerTouchTs = 0L;
+        presentationAudioSpinnerTouchTs = 0L;
+        displaySpinnerTouchTs = 0L;
         deviceNames.clear();
         displayItems.clear();
-        // 获取所有显示设备的名称（包括主屏和副屏）
         allDisplays = displayManager.getDisplays();
         for (Display display : allDisplays) {
-            String displayName = "显示器 " + display.getDisplayId(); // 根据需要自定义显示名称
+            String displayName = "显示器 " + display.getDisplayId();
             int displayId = display.getDisplayId();
-            // 检查是否已存在显示器ID，避免重复添加
             boolean exists = false;
             for (DisplayItem item : displayItems) {
                 if (item.displayId == displayId) {
@@ -626,24 +1000,30 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
-            // 如果没有重复的显示器ID，才添加
             if (!exists) {
-                displayItems.add(new DisplayItem(displayName, displayId)); // 创建一个新的 DisplayItem 对象并添加到列表
+                displayItems.add(new DisplayItem(displayName, displayId));
             }
         }
 
         displaySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
+                if (!displaySpinnerTouched || (SystemClock.uptimeMillis() - displaySpinnerTouchTs) > 2000L) {
+                    displaySpinnerTouched = false;
+                    displaySpinnerTouchTs = 0L;
+                    return;
+                }
+                displaySpinnerTouched = false;
+                displaySpinnerTouchTs = 0L;
                 if (position >= 0) {
-                    // 获取选中的 DisplayItem 对象
                     DisplayItem selectedDisplayItem = displayItems.get(position);
-                    // 取得 displayId 并传递给 initializePresentation 方法
                     selectedDisplayId = selectedDisplayItem.displayId;
                     initializePresentation(selectedDisplayId);
-                    handleDeviceSelectionForPresentation(device);
-                }else {
-                    Log.d("AudioDevice", " position <= 0 && position > presentations.size()");
+                    if (device instanceof AudioDeviceInfo) {
+                        handleDeviceSelectionForPresentation(device);
+                    } else {
+                        Log.d("AudioDevice", "副屏音频设备尚未选择，跳过设置");
+                    }
                 }
             }
 
@@ -652,58 +1032,68 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // 获取所有音频输出设备
         OutputDevices = Arrays.asList(mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
-        // 获取设备类型并转换为可显示的名称
         for (AudioDeviceInfo device : OutputDevices) {
             String deviceTypeName = getDeviceTypeName(device.getType());
-            Log.d("AudioDevice", "Device ID: " + device.getId() + " Name: " + device.getProductName() + " Type: " + deviceTypeName);
             deviceNames.add(deviceTypeName);
         }
-        // 刷新显示设备 Spinner 适配器
         ArrayAdapter<DisplayItem> displayAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, displayItems);
         displayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         displaySpinner.setAdapter(displayAdapter);
-        // 刷新 Spinner 适配器
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, deviceNames);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 
-        // 设置新适配器到 Spinner1 和 Spinner2
         mAudioDevicesSpinner1.setAdapter(adapter);
         mAudioDevicesSpinner2.setAdapter(adapter);
 
-        // 重新设置 Spinner 的监听器（如果需要）
         mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                handleAudioDeviceSelection(parentView, selectedItemView, position, id, false);  // false 表示处理的是普通的 AudioDevice
+                if (!mainAudioSpinnerTouched || (SystemClock.uptimeMillis() - mainAudioSpinnerTouchTs) > 2000L) {
+                    mainAudioSpinnerTouched = false;
+                    mainAudioSpinnerTouchTs = 0L;
+                    return;
+                }
+                mainAudioSpinnerTouched = false;
+                mainAudioSpinnerTouchTs = 0L;
+                handleAudioDeviceSelection(parentView, selectedItemView, position, id, false);
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
-                // 如果没有选择任何设备，可以执行一些默认操作
             }
         });
 
         mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                handleAudioDeviceSelection(parentView, selectedItemView, position, id, true);  // true 表示处理的是 Presentation
+                if (!presentationAudioSpinnerTouched || (SystemClock.uptimeMillis() - presentationAudioSpinnerTouchTs) > 2000L) {
+                    presentationAudioSpinnerTouched = false;
+                    presentationAudioSpinnerTouchTs = 0L;
+                    return;
+                }
+                presentationAudioSpinnerTouched = false;
+                presentationAudioSpinnerTouchTs = 0L;
+                handleAudioDeviceSelection(parentView, selectedItemView, position, id, true);
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
-                // 如果没有选择任何设备，可以执行一些默认操作
             }
         });
-
-
     }
     @Override
     public void onStop() {
+        if (isFullScreen) {
+            isFullScreen = false;
+            applyInlineFullScreen(false);
+        }
         super.onStop();
+        if (fullScreenDialog != null && fullScreenDialog.isShowing()) {
+            fullScreenDialog.dismiss();
+        }
         if (mediaPlayer != null) {
-            mediaPlayer.release();  // 释放资源
+            mediaPlayer.release();
             mediaPlayer = null;
         }
     }

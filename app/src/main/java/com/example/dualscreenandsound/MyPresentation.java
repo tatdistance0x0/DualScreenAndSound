@@ -40,27 +40,34 @@ public class MyPresentation extends Presentation {
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
-                Log.d("MediaPlayer", "surfaceCreated");
-                // Surface 创建后，可以初始化播放器
-                if (MainActivity.presentionselectedUri != null) {
-                    initMediaPlayer(MainActivity.presentionselectedUri, surface);  // 直接传递Uri给MediaPlayer
+                Log.d("MediaPlayer", "MyPresentation surfaceCreated. Attempting to attach/init MediaPlayer.");
+                if (mediaPlayer == null && MainActivity.presentionselectedUri != null) { // Only init if no player exists and a URI is selected
+                    initMediaPlayer(MainActivity.presentionselectedUri, holder.getSurface());
+                } else if (mediaPlayer != null) { // If player exists, just set the new surface
+                    mediaPlayer.setSurface(holder.getSurface());
+                    // Restore playback state if it was saved, but only if not currently switching to a new video
+                    if (!MainActivity.isSwitchingToNewVideo) {
+                        restorePlaybackState();
+                    }
                 }
             }
 
             @Override
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                Log.d("MediaPlayer", "surfaceChanged");
+                Log.d("MediaPlayer", "MyPresentation surfaceChanged");
                 // 处理Surface变化
             }
 
             @Override
             public void surfaceDestroyed(SurfaceHolder holder) {
-                Log.d("MediaPlayer", "surfaceDestroyed");
-                // 在 Surface 销毁时释放播放器资源
-                if (mediaPlayer != null ) {
-                    releaseMediaPlayer(); // 释放资源
-                }
+                Log.d("MediaPlayer", "MyPresentation surfaceDestroyed. Saving playback state and detaching MediaPlayer.");
+                savePlaybackState(); // Always save playback state
 
+                // Only detach surface, do NOT release MediaPlayer here
+                if (mediaPlayer != null) {
+                    mediaPlayer.setSurface(null); // Detach the Surface from the MediaPlayer
+                    Log.d("MediaPlayer", "MyPresentation MediaPlayer Surface 已分离，player 未释放。");
+                }
             }
         });
     }
@@ -117,7 +124,7 @@ public class MyPresentation extends Presentation {
     }
 
     // 恢复MediaPlayer播放状态
-    private void restorePlaybackState() {
+    private void restorePlaybackState() { // Changed back to private
         if (mediaPlayer != null) {
             try {
                 Log.d("MediaPlayer", "尝试恢复restorePlaybackState");

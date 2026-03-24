@@ -1,75 +1,132 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
-    <!-- 播放按钮 -->
-    <Button
-        android:id="@+id/btn_displaymanager"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/displaymanager" />
+    android:layout_height="match_parent">
 
-    <Button
-        android:id="@+id/btn_presentation_displaymanager"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/presentation_displaymanager" />
-    <Button
-        android:id="@+id/btn_selectfile"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/btn_selectfile" />
-
-    <Button
-        android:id="@+id/btn_presentation_selectfile"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/btn_presentation_selectfile" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="设置主屏音频路由"
-        android:layout_marginTop="16dp"
-        android:textColor="#000000"
-        android:textSize="20sp" />
-    <Spinner
-        android:id="@+id/spinner_audio_devices"
+    <ScrollView
+        android:id="@+id/scrollView"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="30dp" />
-    <TextView
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/controlsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- 播放按钮 -->
+            <Button
+                android:id="@+id/btn_displaymanager"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="播放" />
+
+            <Button
+                android:id="@+id/btn_presentation_displaymanager"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="副屏播放" />
+
+            <Button
+                android:id="@+id/btn_selectfile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选择主屏文件" />
+
+            <Button
+                android:id="@+id/btn_presentation_selectfile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选择副屏文件" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="设置主屏音频路由"
+                android:textColor="#000000"
+                android:textSize="20sp" />
+
+            <Spinner
+                android:id="@+id/spinner_audio_devices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="30dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="设置副屏音频路由"
+                android:textColor="#000000"
+                android:textSize="20sp" />
+
+            <Spinner
+                android:id="@+id/spinner_audio_presentation_devices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="30dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="选择指定的副屏（0为主屏）"
+                android:textColor="#000000"
+                android:textSize="20sp" />
+
+            <Spinner
+                android:id="@+id/displaySpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="30dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="主屏预览"
+                android:textColor="#000000"
+                android:textSize="20sp" />
+
+            <!-- 这个 Container 的 ID 会被代码引用 -->
+            <FrameLayout
+                android:id="@+id/surfaceContainer"
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:layout_marginTop="8dp"
+                android:background="#000000">
+
+                <SurfaceView
+                    android:id="@+id/surfaceView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <Button
+                    android:id="@+id/btn_fullscreen"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="8dp"
+                    android:alpha="0.7"
+                    android:text="全屏" />
+            </FrameLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 退出按钮 -->
+    <Button
+        android:id="@+id/btn_exit_fullscreen"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="设置副屏音频路由"
-        android:layout_marginTop="16dp"
-        android:textColor="#000000"
-        android:textSize="20sp" />
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="16dp"
+        android:text="退出全屏"
+        android:visibility="gone" />
 
-    <Spinner
-        android:id="@+id/spinner_audio_presentation_devices"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="30dp" />
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="选择指定的副屏（0为主屏）"
-        android:layout_marginTop="16dp"
-        android:textColor="#000000"
-        android:textSize="20sp" />
-    <Spinner
-        android:id="@+id/displaySpinner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:entries="@array/display_names"
-        android:minHeight="30dp" />
-
-    <SurfaceView
-        android:id="@+id/surfaceView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-</LinearLayout>
+</RelativeLayout>
