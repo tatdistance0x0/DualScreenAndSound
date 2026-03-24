@@ -118,6 +118,8 @@ public class MainActivity extends AppCompatActivity {
     private long pendingMainRouteTs = 0L;
     private long pendingPresentationRouteTs = 0L;
     private final Runnable applyRouteSwitchQueueRunnable = this::drainRouteSwitchQueue;
+    private boolean mainVideoRenderingStarted = false;
+    private boolean mainSyncParamsUnsupported = false;
 
     private class DisplayItem {
         String displayName;
@@ -644,7 +646,7 @@ public class MainActivity extends AppCompatActivity {
             if (isAudioDeviceSet) {
                 if (mediaPlayer.isPlaying()) {
                     mediaPlayer.pause();
-                    buttonText.setText("播放");
+                    buttonText.setText("主屏播放");
                 } else {
                     mediaPlayer.start();
                     scheduleMainSyncNudge("main-manual-start");
@@ -798,7 +800,7 @@ public class MainActivity extends AppCompatActivity {
         MediaPlayer player = presentation.mediaPlayer;
         if (player.isPlaying()) {
             player.pause();
-            buttonText.setText("播放");
+            buttonText.setText("副屏播放");
             return;
         }
 
@@ -1058,7 +1060,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyMainSyncParams(MediaPlayer player, String reason) {
-        if (player == null) return;
+        if (player == null || mainSyncParamsUnsupported) return;
         try {
             SyncParams syncParams = new SyncParams()
                     .allowDefaults()
@@ -1066,7 +1068,10 @@ public class MainActivity extends AppCompatActivity {
                     .setAudioAdjustMode(SyncParams.AUDIO_ADJUST_MODE_RESAMPLE);
             player.setSyncParams(syncParams);
             Log.d("MediaPlayer", "主屏 SyncParams 应用成功: " + reason);
-        } catch (IllegalArgumentException | IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
+            mainSyncParamsUnsupported = true;
+            Log.w("MediaPlayer", "主屏设备不支持 SyncParams，后续自动跳过", e);
+        } catch (IllegalStateException e) {
             Log.w("MediaPlayer", "主屏 SyncParams 应用失败: " + reason, e);
         }
     }
