@@ -1,16 +1,16 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
     <style name="Theme.DualScreenAndSound" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Primary brand color. -->
         <item name="colorPrimary">@color/brand_accent</item>
         <item name="colorPrimaryVariant">@color/brand_accent_variant</item>
         <item name="colorOnPrimary">@color/white</item>
-        <!-- Secondary brand color. -->
         <item name="colorSecondary">@color/surface_soft</item>
         <item name="colorSecondaryVariant">@color/surface_chip</item>
         <item name="colorOnSecondary">@color/text_primary</item>
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
-        <!-- Customize your theme here. -->
+        <item name="colorSurface">@color/surface_elevated</item>
+        <item name="android:colorBackground">@color/bg_app_start</item>
+        <item name="android:statusBarColor">@color/bg_app_start</item>
+        <item name="android:navigationBarColor">@color/bg_app_end</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

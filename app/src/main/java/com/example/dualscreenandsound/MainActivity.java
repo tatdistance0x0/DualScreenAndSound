@@ -23,6 +23,7 @@ import android.util.Log;
 import android.view.Display;
 import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -63,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private static final long OVERLAY_AUTO_HIDE_MS = 3000L;
     private static final long OVERLAY_FADE_DURATION_MS = 180L;
     private static final long CENTER_PLAY_ICON_DURATION_MS = 650L;
+    private static final int OVERLAY_REVEAL_OFFSET_DP = 24;
     private static final int OVERLAY_PANEL_EDGE_DP = 8;
     private static final int OVERLAY_PANEL_GAP_DP = 8;
     private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
@@ -132,6 +134,7 @@ public class MainActivity extends AppCompatActivity {
     private final List<View> nonPlayerViews = new ArrayList<>();
     private int inlineOriginalSurfaceHeight = -1;
     private int inlineOriginalSurfaceTopMargin = 0;
+    private int inlineOriginalSurfaceBottomMargin = 0;
     private boolean inlineOriginalPaddingCaptured = false;
     private int inlineOriginalPaddingLeft = 0;
     private int inlineOriginalPaddingTop = 0;
@@ -471,6 +474,7 @@ public class MainActivity extends AppCompatActivity {
     private void setupEnhancedPlayerControls() {
         setupMainOverlayTapGesture();
         setupSubControlFold();
+        bringMainOverlayViewsToFront();
         if (seekOverlayProgress != null) setupMainProgressSeekBar(seekOverlayProgress, true);
         if (seekSubProgress != null) setupSubProgressSeekBar(seekSubProgress);
 
@@ -679,7 +683,23 @@ public class MainActivity extends AppCompatActivity {
         if (mainTapLayer != null) {
             mainTapLayer.setClickable(true);
             mainTapLayer.setOnTouchListener((v, event) -> mainTapGestureDetector != null && mainTapGestureDetector.onTouchEvent(event));
+            mainTapLayer.setOnGenericMotionListener((v, event) -> {
+                if (!isMouseRevealEvent(event)) return false;
+                showMainOverlayControls(true);
+                return true;
+            });
         }
+    }
+
+    private boolean isMouseRevealEvent(MotionEvent event) {
+        if (event == null) return false;
+        int action = event.getActionMasked();
+        if (action != MotionEvent.ACTION_HOVER_MOVE
+                && action != MotionEvent.ACTION_HOVER_ENTER
+                && action != MotionEvent.ACTION_MOVE) {
+            return false;
+        }
+        return (event.getSource() & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE;
     }
 
     private boolean isTapInCenterZone(View target, MotionEvent event) {
@@ -716,8 +736,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateMainSpeedItemVisual(TextView view, boolean selected) {
         if (view == null) return;
-        view.setTextColor(ContextCompat.getColor(this, selected ? R.color.brand_accent : R.color.white));
-        view.setAlpha(selected ? 1f : 0.85f);
+        view.setTextColor(ContextCompat.getColor(this,
+                selected ? R.color.overlay_text_primary : R.color.overlay_text_secondary));
+        view.setBackgroundResource(selected ? R.drawable.bg_overlay_choice_selected : 0);
+        view.setAlpha(selected ? 1f : 0.86f);
     }
 
     private void toggleMainOverlayPanel(View panel, View anchor) {
@@ -725,6 +747,7 @@ public class MainActivity extends AppCompatActivity {
         boolean shouldShow = panel.getVisibility() != View.VISIBLE;
         hideAllMainOverlayPanels();
         if (shouldShow) {
+            bringMainOverlayViewsToFront();
             panel.setAlpha(0f);
             panel.setVisibility(View.VISIBLE);
             positionMainOverlayPanelAboveAnchor(panel, anchor);
@@ -756,31 +779,31 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyMainOverlayUiScale(boolean fullScreenMode) {
         if (layoutOverlayControls != null) {
-            int horizontal = dpToPx(fullScreenMode ? 12 : 8);
-            int vertical = dpToPx(fullScreenMode ? 10 : 6);
+            int horizontal = dpToPx(fullScreenMode ? 14 : 12);
+            int vertical = dpToPx(fullScreenMode ? 12 : 10);
             layoutOverlayControls.setPadding(horizontal, vertical, horizontal, vertical);
         }
 
-        setViewSizeDp(btnOverlayPlayPause, fullScreenMode ? 44 : 34, fullScreenMode ? 44 : 34);
-        setViewSizeDp(btnOverlayVolumeEntry, fullScreenMode ? 40 : 32, fullScreenMode ? 40 : 32);
-        setViewSizeDp(btnOverlaySettings, fullScreenMode ? 40 : 32, fullScreenMode ? 40 : 32);
-        setViewSizeDp(btnFullScreen, fullScreenMode ? 40 : 32, fullScreenMode ? 40 : 32);
+        setViewSizeDp(btnOverlayPlayPause, fullScreenMode ? 48 : 36, fullScreenMode ? 48 : 36);
+        setViewSizeDp(btnOverlayVolumeEntry, fullScreenMode ? 40 : 34, fullScreenMode ? 40 : 34);
+        setViewSizeDp(btnOverlaySettings, fullScreenMode ? 40 : 34, fullScreenMode ? 40 : 34);
+        setViewSizeDp(btnFullScreen, fullScreenMode ? 40 : 34, fullScreenMode ? 40 : 34);
 
         if (btnOverlaySpeedEntry != null) {
             ViewGroup.LayoutParams lp = btnOverlaySpeedEntry.getLayoutParams();
             if (lp != null) {
-                lp.height = dpToPx(fullScreenMode ? 44 : 38);
+                lp.height = dpToPx(fullScreenMode ? 46 : 40);
                 btnOverlaySpeedEntry.setLayoutParams(lp);
             }
-            btnOverlaySpeedEntry.setMinWidth(dpToPx(fullScreenMode ? 100 : 84));
-            btnOverlaySpeedEntry.setMinHeight(dpToPx(fullScreenMode ? 44 : 38));
+            btnOverlaySpeedEntry.setMinWidth(dpToPx(fullScreenMode ? 104 : 88));
+            btnOverlaySpeedEntry.setMinHeight(dpToPx(fullScreenMode ? 46 : 40));
             btnOverlaySpeedEntry.setTextSize(fullScreenMode ? 15f : 13f);
         }
 
-        setTextWidthAndSizeDp(tvOverlayCurrentTime, fullScreenMode ? 56 : 44, fullScreenMode ? 14f : 12f);
-        setTextWidthAndSizeDp(tvOverlayTotalTime, fullScreenMode ? 56 : 44, fullScreenMode ? 14f : 12f);
+        setTextWidthAndSizeDp(tvOverlayCurrentTime, fullScreenMode ? 54 : 46, fullScreenMode ? 14f : 12f);
+        setTextWidthAndSizeDp(tvOverlayTotalTime, fullScreenMode ? 54 : 46, fullScreenMode ? 14f : 12f);
 
-        setPanelWidthAndPaddingDp(layoutOverlaySpeedPanel, fullScreenMode ? 108 : 92, fullScreenMode ? 12 : 10);
+        setPanelWidthAndPaddingDp(layoutOverlaySpeedPanel, fullScreenMode ? 116 : 104, fullScreenMode ? 14 : 12);
         setSpeedItemSize(tvOverlaySpeed200, fullScreenMode);
         setSpeedItemSize(tvOverlaySpeed150, fullScreenMode);
         setSpeedItemSize(tvOverlaySpeed125, fullScreenMode);
@@ -789,15 +812,15 @@ public class MainActivity extends AppCompatActivity {
         setSpeedItemSize(tvOverlaySpeed050, fullScreenMode);
 
         setPanelSizeAndPaddingDp(layoutOverlayVolumePanel,
-                fullScreenMode ? 108 : 92,
-                fullScreenMode ? 250 : 220,
-                fullScreenMode ? 12 : 10);
+                fullScreenMode ? 116 : 104,
+                fullScreenMode ? 250 : 228,
+                fullScreenMode ? 14 : 12);
         if (tvMainVolumeValue != null) {
             tvMainVolumeValue.setTextSize(fullScreenMode ? 16f : 14f);
         }
-        setViewSizeDp(seekMainVolume, fullScreenMode ? 186 : 158, fullScreenMode ? 44 : 40);
+        setViewSizeDp(seekMainVolume, fullScreenMode ? 184 : 160, fullScreenMode ? 44 : 40);
 
-        setPanelWidthAndPaddingDp(layoutOverlaySettingPanel, fullScreenMode ? 300 : 260, fullScreenMode ? 12 : 10);
+        setPanelWidthAndPaddingDp(layoutOverlaySettingPanel, fullScreenMode ? 316 : 278, fullScreenMode ? 14 : 12);
         updateSettingPanelRows(layoutOverlaySettingPanel, fullScreenMode);
     }
 
@@ -805,7 +828,7 @@ public class MainActivity extends AppCompatActivity {
         if (view == null) return;
         ViewGroup.LayoutParams lp = view.getLayoutParams();
         if (lp != null) {
-            lp.height = dpToPx(fullScreenMode ? 44 : 38);
+            lp.height = dpToPx(fullScreenMode ? 44 : 40);
             view.setLayoutParams(lp);
         }
         view.setTextSize(fullScreenMode ? 15f : 14f);
@@ -856,7 +879,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateSettingPanelRows(View panel, boolean fullScreenMode) {
         if (!(panel instanceof LinearLayout)) return;
         LinearLayout container = (LinearLayout) panel;
-        int rowHeight = dpToPx(fullScreenMode ? 56 : 48);
+        int rowHeight = dpToPx(fullScreenMode ? 56 : 50);
         int secondTopMargin = dpToPx(fullScreenMode ? 10 : 8);
         for (int i = 0; i < container.getChildCount(); i++) {
             View child = container.getChildAt(i);
@@ -900,13 +923,19 @@ public class MainActivity extends AppCompatActivity {
 
     private void showMainOverlayControls(boolean allowAutoHide) {
         if (layoutOverlayControls == null) return;
+        bringMainOverlayViewsToFront();
         overlayControlsVisible = true;
         layoutOverlayControls.animate().cancel();
         if (layoutOverlayControls.getVisibility() != View.VISIBLE) {
             layoutOverlayControls.setAlpha(0f);
+            layoutOverlayControls.setTranslationY(dpToPx(OVERLAY_REVEAL_OFFSET_DP));
             layoutOverlayControls.setVisibility(View.VISIBLE);
         }
-        layoutOverlayControls.animate().alpha(1f).setDuration(120L).start();
+        layoutOverlayControls.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(160L)
+                .start();
         if (allowAutoHide) {
             scheduleMainOverlayAutoHideIfNeeded();
         } else {
@@ -923,13 +952,26 @@ public class MainActivity extends AppCompatActivity {
         layoutOverlayControls.animate().cancel();
         layoutOverlayControls.animate()
                 .alpha(0f)
+                .translationY(dpToPx(OVERLAY_REVEAL_OFFSET_DP))
                 .setDuration(OVERLAY_FADE_DURATION_MS)
                 .withEndAction(() -> {
                     if (!overlayControlsVisible && layoutOverlayControls != null) {
                         layoutOverlayControls.setVisibility(View.GONE);
                         layoutOverlayControls.setAlpha(1f);
+                        layoutOverlayControls.setTranslationY(0f);
                     }
                 }).start();
+    }
+
+    private void bringMainOverlayViewsToFront() {
+        if (layoutOverlayControls != null) layoutOverlayControls.bringToFront();
+        if (layoutOverlaySpeedPanel != null) layoutOverlaySpeedPanel.bringToFront();
+        if (layoutOverlayVolumePanel != null) layoutOverlayVolumePanel.bringToFront();
+        if (layoutOverlaySettingPanel != null) layoutOverlaySettingPanel.bringToFront();
+        if (ivCenterPlayState != null) ivCenterPlayState.bringToFront();
+        if (surfaceContainer != null) {
+            surfaceContainer.invalidate();
+        }
     }
 
     private void scheduleMainOverlayAutoHideIfNeeded() {
@@ -1058,7 +1100,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         updateMainPlayVisuals();
-        scheduleMainOverlayAutoHideIfNeeded();
     }
 
     private void updateOverlayMainProgressUi() {
@@ -1082,7 +1123,6 @@ public class MainActivity extends AppCompatActivity {
         }
         tvOverlayTotalTime.setText(formatTimeMs(Math.max(durationMs, 0)));
         updateMainPlayVisuals();
-        scheduleMainOverlayAutoHideIfNeeded();
     }
 
     private void updateSubProgressUi() {
@@ -1184,8 +1224,6 @@ public class MainActivity extends AppCompatActivity {
         }
         if (!isPlaying) {
             cancelMainOverlayAutoHide();
-        } else {
-            scheduleMainOverlayAutoHideIfNeeded();
         }
     }
 
@@ -1478,6 +1516,7 @@ public class MainActivity extends AppCompatActivity {
             if (inlineOriginalSurfaceHeight < 0) {
                 inlineOriginalSurfaceHeight = lp.height;
                 inlineOriginalSurfaceTopMargin = lp.topMargin;
+                inlineOriginalSurfaceBottomMargin = lp.bottomMargin;
             }
             if (controlsLayout != null && !inlineOriginalPaddingCaptured) {
                 inlineOriginalPaddingLeft = controlsLayout.getPaddingLeft();
@@ -1523,11 +1562,17 @@ public class MainActivity extends AppCompatActivity {
             }
             lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
             lp.topMargin = 0;
+            lp.bottomMargin = 0;
             surfaceContainer.setLayoutParams(lp);
             updateFullScreenIcon();
             applyMainOverlayUiScale(true);
+            View rootLayout = findViewById(R.id.rootLayout);
+            if (rootLayout != null) {
+                rootLayout.setBackgroundColor(Color.BLACK);
+            }
             applyImmersiveMode(getWindow());
             showMainOverlayControls(true);
+            uiHandler.postDelayed(this::scheduleMainOverlayAutoHideIfNeeded, 120L);
         } else {
             for (View view : nonPlayerViews) {
                 view.setVisibility(View.VISIBLE);
@@ -1547,6 +1592,7 @@ public class MainActivity extends AppCompatActivity {
                 lp.height = inlineOriginalSurfaceHeight;
             }
             lp.topMargin = inlineOriginalSurfaceTopMargin;
+            lp.bottomMargin = inlineOriginalSurfaceBottomMargin;
             surfaceContainer.setLayoutParams(lp);
             if (controlsLayout != null) {
                 ViewGroup.LayoutParams controlsParams = controlsLayout.getLayoutParams();
@@ -1561,6 +1607,10 @@ public class MainActivity extends AppCompatActivity {
             }
             updateFullScreenIcon();
             applyMainOverlayUiScale(false);
+            View rootLayout = findViewById(R.id.rootLayout);
+            if (rootLayout != null) {
+                rootLayout.setBackgroundResource(R.drawable.bg_main_gradient);
+            }
             clearImmersiveMode();
             scrollToInlinePreview();
             showMainOverlayControls(true);

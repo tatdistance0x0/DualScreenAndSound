@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Display;
 import android.view.GestureDetector;
+import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -34,6 +35,7 @@ public class MyPresentation extends Presentation {
     private static final long OVERLAY_AUTO_HIDE_MS = 3000L;
     private static final long OVERLAY_FADE_MS = 180L;
     private static final long CENTER_ICON_HIDE_MS = 650L;
+    private static final int OVERLAY_REVEAL_OFFSET_DP = 24;
     private static final int OVERLAY_PANEL_EDGE_DP = 8;
     private static final int OVERLAY_PANEL_GAP_DP = 8;
     private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
@@ -177,6 +179,7 @@ public class MyPresentation extends Presentation {
 
     private void setupOverlayControls() {
         setupTapGesture();
+        bringOverlayViewsToFront();
 
         if (seekProgress != null) {
             seekProgress.setMax(1000);
@@ -315,7 +318,23 @@ public class MyPresentation extends Presentation {
         if (tapLayer != null) {
             tapLayer.setClickable(true);
             tapLayer.setOnTouchListener((v, event) -> gestureDetector != null && gestureDetector.onTouchEvent(event));
+            tapLayer.setOnGenericMotionListener((v, event) -> {
+                if (!isMouseRevealEvent(event)) return false;
+                showOverlayControls(true);
+                return true;
+            });
         }
+    }
+
+    private boolean isMouseRevealEvent(MotionEvent event) {
+        if (event == null) return false;
+        int action = event.getActionMasked();
+        if (action != MotionEvent.ACTION_HOVER_MOVE
+                && action != MotionEvent.ACTION_HOVER_ENTER
+                && action != MotionEvent.ACTION_MOVE) {
+            return false;
+        }
+        return (event.getSource() & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE;
     }
 
     private boolean isTapInCenterZone(View target, MotionEvent event) {
@@ -374,6 +393,7 @@ public class MyPresentation extends Presentation {
         boolean shouldShow = targetPanel.getVisibility() != View.VISIBLE;
         hideAllPanels();
         if (shouldShow) {
+            bringOverlayViewsToFront();
             targetPanel.setAlpha(0f);
             targetPanel.setVisibility(View.VISIBLE);
             positionOverlayPanelAboveAnchor(targetPanel, anchor);
@@ -424,13 +444,19 @@ public class MyPresentation extends Presentation {
 
     private void showOverlayControls(boolean autoHide) {
         if (overlayControls == null) return;
+        bringOverlayViewsToFront();
         overlayVisible = true;
         overlayControls.animate().cancel();
         if (overlayControls.getVisibility() != View.VISIBLE) {
             overlayControls.setAlpha(0f);
+            overlayControls.setTranslationY(dpToPx(OVERLAY_REVEAL_OFFSET_DP));
             overlayControls.setVisibility(View.VISIBLE);
         }
-        overlayControls.animate().alpha(1f).setDuration(120L).start();
+        overlayControls.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(160L)
+                .start();
         if (autoHide) {
             scheduleOverlayAutoHideIfNeeded();
         } else {
@@ -445,12 +471,25 @@ public class MyPresentation extends Presentation {
         overlayVisible = false;
         cancelOverlayAutoHide();
         overlayControls.animate().cancel();
-        overlayControls.animate().alpha(0f).setDuration(OVERLAY_FADE_MS).withEndAction(() -> {
+        overlayControls.animate()
+                .alpha(0f)
+                .translationY(dpToPx(OVERLAY_REVEAL_OFFSET_DP))
+                .setDuration(OVERLAY_FADE_MS)
+                .withEndAction(() -> {
             if (!overlayVisible && overlayControls != null) {
                 overlayControls.setVisibility(View.GONE);
                 overlayControls.setAlpha(1f);
+                overlayControls.setTranslationY(0f);
             }
         }).start();
+    }
+
+    private void bringOverlayViewsToFront() {
+        if (overlayControls != null) overlayControls.bringToFront();
+        if (speedPanel != null) speedPanel.bringToFront();
+        if (volumePanel != null) volumePanel.bringToFront();
+        if (settingsPanel != null) settingsPanel.bringToFront();
+        if (centerPlayState != null) centerPlayState.bringToFront();
     }
 
     private void scheduleOverlayAutoHideIfNeeded() {
@@ -669,8 +708,10 @@ public class MyPresentation extends Presentation {
 
     private void updateSpeedItemVisual(TextView view, boolean selected) {
         if (view == null) return;
-        view.setTextColor(ContextCompat.getColor(getContext(), selected ? R.color.brand_accent : R.color.white));
-        view.setAlpha(selected ? 1f : 0.85f);
+        view.setTextColor(ContextCompat.getColor(getContext(),
+                selected ? R.color.overlay_text_primary : R.color.overlay_text_secondary));
+        view.setBackgroundResource(selected ? R.drawable.bg_overlay_choice_selected : 0);
+        view.setAlpha(selected ? 1f : 0.86f);
     }
 
     private boolean isPlayerPlayingSafely() {
