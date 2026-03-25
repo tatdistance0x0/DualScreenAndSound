@@ -31,7 +31,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.AdapterView;
+import android.widget.AutoCompleteTextView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -40,7 +40,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -98,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
     private View layoutSubControlContent;
     private TextView tvSubControlToggle;
     private List<AudioDeviceInfo> OutputDevices;
-    private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2, displaySpinner;
+    private AutoCompleteTextView mAudioDevicesSpinner1,mAudioDevicesSpinner2, displaySpinner;
     private String selectedFilePath,selectedPresentionFilePath,previousMainScreenFilePath, previousPresentationFilePath= "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
@@ -140,12 +139,6 @@ public class MainActivity extends AppCompatActivity {
     private int inlineOriginalPaddingBottom = 0;
     private int inlineOriginalControlsLayoutHeight = ViewGroup.LayoutParams.WRAP_CONTENT;
     private boolean wasPlayingBeforeFullScreen = false;
-    private boolean mainAudioSpinnerTouched = false;
-    private boolean presentationAudioSpinnerTouched = false;
-    private boolean displaySpinnerTouched = false;
-    private long mainAudioSpinnerTouchTs = 0L;
-    private long presentationAudioSpinnerTouchTs = 0L;
-    private long displaySpinnerTouchTs = 0L;
     private static final long ROUTE_SWITCH_DEBOUNCE_MS = 220L;
     private static final long ROUTE_SWITCH_GLOBAL_INTERVAL_MS = 850L;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
@@ -283,27 +276,24 @@ public class MainActivity extends AppCompatActivity {
         mAudioDevicesSpinner1.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 suppressSystemUiSoundEffectsTemporarily();
-                mainAudioSpinnerTouched = true;
-                mainAudioSpinnerTouchTs = SystemClock.uptimeMillis();
             }
             return false;
         });
         mAudioDevicesSpinner2.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 suppressSystemUiSoundEffectsTemporarily();
-                presentationAudioSpinnerTouched = true;
-                presentationAudioSpinnerTouchTs = SystemClock.uptimeMillis();
             }
             return false;
         });
         displaySpinner.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 suppressSystemUiSoundEffectsTemporarily();
-                displaySpinnerTouched = true;
-                displaySpinnerTouchTs = SystemClock.uptimeMillis();
             }
             return false;
         });
+        mAudioDevicesSpinner1.setOnClickListener(v -> mAudioDevicesSpinner1.showDropDown());
+        mAudioDevicesSpinner2.setOnClickListener(v -> mAudioDevicesSpinner2.showDropDown());
+        displaySpinner.setOnClickListener(v -> displaySpinner.showDropDown());
         refreshAudioDeviceList();
         updateDashboardStatus();
 
@@ -1348,7 +1338,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateDashboardStatus() {
         if (tvStatusMain != null) {
-            tvStatusMain.setText("主屏在线");
+            tvStatusMain.setText("● 主屏在线");
             tvStatusMain.setTextColor(ContextCompat.getColor(this, R.color.status_success));
         }
         boolean hasSubDisplay = false;
@@ -1361,13 +1351,13 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         if (tvStatusSub != null) {
-            tvStatusSub.setText(hasSubDisplay ? "副屏已连接" : "副屏未连接");
+            tvStatusSub.setText(hasSubDisplay ? "● 副屏已连接" : "● 副屏未连接");
             tvStatusSub.setTextColor(ContextCompat.getColor(
                     this, hasSubDisplay ? R.color.status_success : R.color.status_warning));
         }
         if (tvStatusAudioCount != null) {
             int count = OutputDevices != null ? OutputDevices.size() : 0;
-            tvStatusAudioCount.setText("音频设备 " + count);
+            tvStatusAudioCount.setText("● 音频设备 " + count);
             tvStatusAudioCount.setTextColor(ContextCompat.getColor(
                     this, count > 0 ? R.color.status_success : R.color.status_warning));
         }
@@ -1417,16 +1407,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateRouteSummaryTexts() {
         if (tvSummaryMainAudio != null) {
-            Object item = mAudioDevicesSpinner1 != null ? mAudioDevicesSpinner1.getSelectedItem() : null;
-            tvSummaryMainAudio.setText("当前：" + (item != null ? item.toString() : "未选择"));
+            String item = mAudioDevicesSpinner1 != null ? mAudioDevicesSpinner1.getText().toString() : "";
+            tvSummaryMainAudio.setText("当前：" + (!item.isEmpty() ? item : "未选择"));
         }
         if (tvSummarySubAudio != null) {
-            Object item = mAudioDevicesSpinner2 != null ? mAudioDevicesSpinner2.getSelectedItem() : null;
-            tvSummarySubAudio.setText("当前：" + (item != null ? item.toString() : "未选择"));
+            String item = mAudioDevicesSpinner2 != null ? mAudioDevicesSpinner2.getText().toString() : "";
+            tvSummarySubAudio.setText("当前：" + (!item.isEmpty() ? item : "未选择"));
         }
         if (tvSummaryDisplay != null) {
-            Object item = displaySpinner != null ? displaySpinner.getSelectedItem() : null;
-            tvSummaryDisplay.setText("当前：" + (item != null ? item.toString() : "未选择"));
+            String item = displaySpinner != null ? displaySpinner.getText().toString() : "";
+            tvSummaryDisplay.setText("当前：" + (!item.isEmpty() ? item : "未选择"));
         }
     }
 
@@ -1736,7 +1726,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 通用方法：设置音频设备并恢复播放状态
-    private void handleAudioDeviceSelection(AdapterView<?> parentView, View selectedItemView, int position, long id, boolean isPresentation) {
+    private void handleAudioDeviceSelection(int position, boolean isPresentation) {
         if (OutputDevices == null || position >= OutputDevices.size()) return;
         device = OutputDevices.get(position);
 
@@ -2327,15 +2317,18 @@ public class MainActivity extends AppCompatActivity {
         return -1;
     }
 
+    private int findDisplayIndex(List<DisplayItem> displays, int targetDisplayId) {
+        if (displays == null || displays.isEmpty()) return -1;
+        for (int i = 0; i < displays.size(); i++) {
+            if (displays.get(i).displayId == targetDisplayId) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
 
     private void refreshAudioDeviceList() {
-        // 清空“用户触发”标志，防止 setAdapter 触发的程序性回调误执行重路由
-        mainAudioSpinnerTouched = false;
-        presentationAudioSpinnerTouched = false;
-        displaySpinnerTouched = false;
-        mainAudioSpinnerTouchTs = 0L;
-        presentationAudioSpinnerTouchTs = 0L;
-        displaySpinnerTouchTs = 0L;
         deviceNames.clear();
         displayItems.clear();
         allDisplays = displayManager.getDisplays();
@@ -2353,34 +2346,6 @@ public class MainActivity extends AppCompatActivity {
                 displayItems.add(new DisplayItem(displayName, displayId));
             }
         }
-
-        displaySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                if (!displaySpinnerTouched || (SystemClock.uptimeMillis() - displaySpinnerTouchTs) > 2000L) {
-                    displaySpinnerTouched = false;
-                    displaySpinnerTouchTs = 0L;
-                    return;
-                }
-                displaySpinnerTouched = false;
-                displaySpinnerTouchTs = 0L;
-                if (position >= 0) {
-                    DisplayItem selectedDisplayItem = displayItems.get(position);
-                    selectedDisplayId = selectedDisplayItem.displayId;
-                    initializePresentation(selectedDisplayId);
-                    updateRouteSummaryTexts();
-                    if (device instanceof AudioDeviceInfo) {
-                        handleDeviceSelectionForPresentation(device);
-                    } else {
-                        Log.d("AudioDevice", "副屏音频设备尚未选择，跳过设置");
-                    }
-                }
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parentView) {
-            }
-        });
 
         OutputDevices = Arrays.asList(mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS));
         updateDashboardStatus();
@@ -2415,56 +2380,54 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<DisplayItem> displayAdapter = new ArrayAdapter<>(this, R.layout.spinner_item, displayItems);
         displayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         displaySpinner.setAdapter(displayAdapter);
+
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.spinner_item, deviceNames);
         adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
-
         mAudioDevicesSpinner1.setAdapter(adapter);
         mAudioDevicesSpinner2.setAdapter(adapter);
+
         int mainIndex = findDeviceIndex(OutputDevices, selectedDevice);
         if (mainIndex >= 0) {
-            mAudioDevicesSpinner1.setSelection(mainIndex, false);
+            mAudioDevicesSpinner1.setText(deviceNames.get(mainIndex), false);
         }
         int presentationIndex = findDeviceIndex(OutputDevices, selectedDeviceCache);
         if (presentationIndex >= 0) {
-            mAudioDevicesSpinner2.setSelection(presentationIndex, false);
+            mAudioDevicesSpinner2.setText(deviceNames.get(presentationIndex), false);
+        }
+        int displayIndex = findDisplayIndex(displayItems, selectedDisplayId);
+        if (displayIndex < 0 && !displayItems.isEmpty()) {
+            displayIndex = 0;
+        }
+        if (displayIndex >= 0) {
+            DisplayItem selectedDisplay = displayItems.get(displayIndex);
+            selectedDisplayId = selectedDisplay.displayId;
+            displaySpinner.setText(selectedDisplay.toString(), false);
         }
         updateRouteSummaryTexts();
 
-        mAudioDevicesSpinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                if (!mainAudioSpinnerTouched || (SystemClock.uptimeMillis() - mainAudioSpinnerTouchTs) > 2000L) {
-                    mainAudioSpinnerTouched = false;
-                    mainAudioSpinnerTouchTs = 0L;
-                    return;
-                }
-                mainAudioSpinnerTouched = false;
-                mainAudioSpinnerTouchTs = 0L;
-                handleAudioDeviceSelection(parentView, selectedItemView, position, id, false);
-                updateRouteSummaryTexts();
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parentView) {
-            }
+        mAudioDevicesSpinner1.setOnItemClickListener((parent, view, position, id) -> {
+            suppressSystemUiSoundEffectsTemporarily();
+            handleAudioDeviceSelection(position, false);
+            updateRouteSummaryTexts();
         });
 
-        mAudioDevicesSpinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-                if (!presentationAudioSpinnerTouched || (SystemClock.uptimeMillis() - presentationAudioSpinnerTouchTs) > 2000L) {
-                    presentationAudioSpinnerTouched = false;
-                    presentationAudioSpinnerTouchTs = 0L;
-                    return;
-                }
-                presentationAudioSpinnerTouched = false;
-                presentationAudioSpinnerTouchTs = 0L;
-                handleAudioDeviceSelection(parentView, selectedItemView, position, id, true);
-                updateRouteSummaryTexts();
-            }
+        mAudioDevicesSpinner2.setOnItemClickListener((parent, view, position, id) -> {
+            suppressSystemUiSoundEffectsTemporarily();
+            handleAudioDeviceSelection(position, true);
+            updateRouteSummaryTexts();
+        });
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parentView) {
+        displaySpinner.setOnItemClickListener((parent, view, position, id) -> {
+            suppressSystemUiSoundEffectsTemporarily();
+            if (position < 0 || position >= displayItems.size()) return;
+            DisplayItem selectedDisplayItem = displayItems.get(position);
+            selectedDisplayId = selectedDisplayItem.displayId;
+            initializePresentation(selectedDisplayId);
+            updateRouteSummaryTexts();
+            if (device instanceof AudioDeviceInfo) {
+                handleDeviceSelectionForPresentation(device);
+            } else {
+                Log.d("AudioDevice", "副屏音频设备尚未选择，跳过设置");
             }
         });
     }
