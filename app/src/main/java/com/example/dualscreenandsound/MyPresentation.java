@@ -28,6 +28,7 @@ public class MyPresentation extends Presentation {
 
     public AudioDeviceInfo selectedDevice;
     private SurfaceHolder surfaceHolder;
+    private boolean primingOutput = false;
     public MyPresentation(Context context, Display display) {
         super(context, display);
         setContentView(R.layout.presentation);  // 这里你可以定义布局文件，包含一个 SurfaceView
@@ -165,6 +166,30 @@ public class MyPresentation extends Presentation {
             }
         }else {
             Log.d("AudioDevice", "selectedDevice为空" );
+        }
+    }
+
+    public boolean isPrimingOutput() {
+        return primingOutput;
+    }
+
+    public boolean primeOutputForSmoothStart() {
+        if (mediaPlayer == null || primingOutput || mediaPlayer.isPlaying()) {
+            return false;
+        }
+        primingOutput = true;
+        try {
+            int resumePosition = Math.max(0, (int) currentPosition);
+            mediaPlayer.seekTo(resumePosition);
+            mediaPlayer.start();
+            mediaPlayer.pause();
+            mediaPlayer.seekTo(resumePosition);
+            return true;
+        } catch (IllegalStateException e) {
+            Log.w("MediaPlayer", "副屏预热失败", e);
+            return false;
+        } finally {
+            primingOutput = false;
         }
     }
 
