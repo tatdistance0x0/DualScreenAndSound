@@ -24,778 +24,34 @@
             android:paddingEnd="20dp"
             android:paddingBottom="28dp">
 
-            <LinearLayout
+            <include
+                android:id="@+id/headerDashboard"
+                layout="@layout/layout_header_dashboard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_panel_card"
-                android:orientation="vertical"
-                android:padding="22dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:orientation="horizontal">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="Dual Screen Studio"
-                            android:textColor="@color/text_primary"
-                            android:textSize="28sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="双屏异显与音频路由演示控制台"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:gravity="end"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/tv_status_main"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_status_pill"
-                            android:ellipsize="end"
-                            android:fontFamily="sans-serif-medium"
-                            android:maxLines="1"
-                            android:paddingStart="12dp"
-                            android:paddingTop="8dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="8dp"
-                            android:text="● 主屏在线"
-                            android:textColor="@color/text_primary"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:id="@+id/tv_status_sub"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:background="@drawable/bg_status_pill"
-                            android:ellipsize="end"
-                            android:fontFamily="sans-serif-medium"
-                            android:maxLines="1"
-                            android:paddingStart="12dp"
-                            android:paddingTop="8dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="8dp"
-                            android:text="● 副屏未连接"
-                            android:textColor="@color/text_primary"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:id="@+id/tv_status_audio_count"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:background="@drawable/bg_status_pill"
-                            android:ellipsize="end"
-                            android:fontFamily="sans-serif-medium"
-                            android:maxLines="1"
-                            android:paddingStart="12dp"
-                            android:paddingTop="8dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="8dp"
-                            android:text="● 音频设备 0"
-                            android:textColor="@color/text_primary"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
+                android:layout_marginBottom="@dimen/dashboard_section_spacing" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_panel_card"
-                android:orientation="vertical"
-                android:padding="22dp">
+                android:layout_marginBottom="@dimen/dashboard_section_spacing"
+                android:orientation="horizontal">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <include
+                    android:id="@+id/mainScreenCard"
+                    layout="@layout/layout_screen_control_card"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="快速操作"
-                    android:textColor="@color/text_primary"
-                    android:textSize="20sp" />
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <include
+                    android:id="@+id/subScreenCard"
+                    layout="@layout/layout_screen_control_card"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="以设备卡片的方式组织播放与文件动作，降低按钮压迫感。"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/btn_displaymanager"
-                        android:layout_width="0dp"
-                        android:layout_height="108dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_button_primary"
-                        android:backgroundTint="@null"
-                        android:drawableTop="@drawable/ic_quick_play_screen"
-                        android:drawablePadding="12dp"
-                        android:drawableTint="@color/button_primary_text"
-                        android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="108dp"
-                        android:paddingStart="16dp"
-                        android:paddingTop="18dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="18dp"
-                        android:text="主屏播放"
-                        android:textAllCaps="false"
-                        android:textColor="@color/button_primary_text"
-                        android:textSize="16sp" />
-
-                    <Space
-                        android:layout_width="12dp"
-                        android:layout_height="1dp" />
-
-                    <Button
-                        android:id="@+id/btn_presentation_displaymanager"
-                        android:layout_width="0dp"
-                        android:layout_height="108dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_button_primary"
-                        android:backgroundTint="@null"
-                        android:drawableTop="@drawable/ic_quick_play_screen"
-                        android:drawablePadding="12dp"
-                        android:drawableTint="@color/button_primary_text"
-                        android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="108dp"
-                        android:paddingStart="16dp"
-                        android:paddingTop="18dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="18dp"
-                        android:text="副屏播放"
-                        android:textAllCaps="false"
-                        android:textColor="@color/button_primary_text"
-                        android:textSize="16sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/btn_selectfile"
-                        android:layout_width="0dp"
-                        android:layout_height="108dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_button_file"
-                        android:backgroundTint="@null"
-                        android:drawableTop="@drawable/ic_quick_media_folder"
-                        android:drawablePadding="12dp"
-                        android:drawableTint="@color/button_file_text"
-                        android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="108dp"
-                        android:paddingStart="16dp"
-                        android:paddingTop="18dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="18dp"
-                        android:text="主屏文件"
-                        android:textAllCaps="false"
-                        android:textColor="@color/button_file_text"
-                        android:textSize="16sp" />
-
-                    <Space
-                        android:layout_width="12dp"
-                        android:layout_height="1dp" />
-
-                    <Button
-                        android:id="@+id/btn_presentation_selectfile"
-                        android:layout_width="0dp"
-                        android:layout_height="108dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_button_file"
-                        android:backgroundTint="@null"
-                        android:drawableTop="@drawable/ic_quick_media_folder"
-                        android:drawablePadding="12dp"
-                        android:drawableTint="@color/button_file_text"
-                        android:fontFamily="sans-serif-medium"
-                        android:gravity="center"
-                        android:minHeight="108dp"
-                        android:paddingStart="16dp"
-                        android:paddingTop="18dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="18dp"
-                        android:text="副屏文件"
-                        android:textAllCaps="false"
-                        android:textColor="@color/button_file_text"
-                        android:textSize="16sp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_panel_card"
-                android:orientation="vertical"
-                android:padding="22dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="路由设置"
-                    android:textColor="@color/text_primary"
-                    android:textSize="20sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="用浅层容器承载路由卡片，再以纯白输入域承接选择动作。"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:background="@drawable/bg_route_setting_item"
-                    android:orientation="vertical"
-                    android:padding="18dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_route_badge_main"
-                            android:fontFamily="sans-serif-medium"
-                            android:gravity="center"
-                            android:text="M"
-                            android:textColor="@color/route_main_text"
-                            android:textSize="13sp" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:fontFamily="sans-serif-medium"
-                                android:text="主屏音频通道"
-                                android:textColor="@color/text_primary"
-                                android:textSize="15sp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="主屏播放默认跟随这里的输出设备"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="12sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="音频"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        app:boxBackgroundColor="@color/white"
-                        app:boxBackgroundMode="filled"
-                        app:boxCornerRadiusBottomEnd="22dp"
-                        app:boxCornerRadiusBottomStart="22dp"
-                        app:boxCornerRadiusTopEnd="22dp"
-                        app:boxCornerRadiusTopStart="22dp"
-                        app:boxStrokeWidth="0dp"
-                        app:boxStrokeWidthFocused="0dp"
-                        app:endIconMode="dropdown_menu"
-                        app:endIconTint="@color/text_muted"
-                        app:hintEnabled="false">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/spinner_audio_devices"
-                            android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:background="@null"
-                            android:completionThreshold="0"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:ellipsize="end"
-                            android:inputType="none"
-                            android:maxLines="1"
-                            android:paddingStart="18dp"
-                            android:paddingEnd="18dp"
-                            android:popupBackground="@color/surface_elevated"
-                            android:textColor="@color/spinner_text"
-                            android:textSize="15sp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <TextView
-                        android:id="@+id/tv_summary_main_audio"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_chip_info"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:paddingStart="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="14dp"
-                        android:paddingBottom="10dp"
-                        android:text="当前：未选择"
-                        android:textColor="@color/text_muted"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_route_setting_item"
-                    android:orientation="vertical"
-                    android:padding="18dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_route_badge_sub"
-                            android:fontFamily="sans-serif-medium"
-                            android:gravity="center"
-                            android:text="S"
-                            android:textColor="@color/route_sub_text"
-                            android:textSize="13sp" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:fontFamily="sans-serif-medium"
-                                android:text="副屏音频通道"
-                                android:textColor="@color/text_primary"
-                                android:textSize="15sp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="副屏可以绑定独立设备，避免与主屏抢占"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="12sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="独立"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        app:boxBackgroundColor="@color/white"
-                        app:boxBackgroundMode="filled"
-                        app:boxCornerRadiusBottomEnd="22dp"
-                        app:boxCornerRadiusBottomStart="22dp"
-                        app:boxCornerRadiusTopEnd="22dp"
-                        app:boxCornerRadiusTopStart="22dp"
-                        app:boxStrokeWidth="0dp"
-                        app:boxStrokeWidthFocused="0dp"
-                        app:endIconMode="dropdown_menu"
-                        app:endIconTint="@color/text_muted"
-                        app:hintEnabled="false">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/spinner_audio_presentation_devices"
-                            android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:background="@null"
-                            android:completionThreshold="0"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:ellipsize="end"
-                            android:inputType="none"
-                            android:maxLines="1"
-                            android:paddingStart="18dp"
-                            android:paddingEnd="18dp"
-                            android:popupBackground="@color/surface_elevated"
-                            android:textColor="@color/spinner_text"
-                            android:textSize="15sp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <TextView
-                        android:id="@+id/tv_summary_sub_audio"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_chip_info"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:paddingStart="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="14dp"
-                        android:paddingBottom="10dp"
-                        android:text="当前：未选择"
-                        android:textColor="@color/text_muted"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_route_setting_item"
-                    android:orientation="vertical"
-                    android:padding="18dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_route_badge_display"
-                            android:fontFamily="sans-serif-medium"
-                            android:gravity="center"
-                            android:text="D"
-                            android:textColor="@color/route_display_text"
-                            android:textSize="13sp" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:fontFamily="sans-serif-medium"
-                                android:text="目标副屏（0 为主屏）"
-                                android:textColor="@color/text_primary"
-                                android:textSize="15sp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="确定内容最终投送到哪一块显示设备"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="12sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="显示"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        app:boxBackgroundColor="@color/white"
-                        app:boxBackgroundMode="filled"
-                        app:boxCornerRadiusBottomEnd="22dp"
-                        app:boxCornerRadiusBottomStart="22dp"
-                        app:boxCornerRadiusTopEnd="22dp"
-                        app:boxCornerRadiusTopStart="22dp"
-                        app:boxStrokeWidth="0dp"
-                        app:boxStrokeWidthFocused="0dp"
-                        app:endIconMode="dropdown_menu"
-                        app:endIconTint="@color/text_muted"
-                        app:hintEnabled="false">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/displaySpinner"
-                            android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:background="@null"
-                            android:completionThreshold="0"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:ellipsize="end"
-                            android:inputType="none"
-                            android:maxLines="1"
-                            android:paddingStart="18dp"
-                            android:paddingEnd="18dp"
-                            android:popupBackground="@color/surface_elevated"
-                            android:textColor="@color/spinner_text"
-                            android:textSize="15sp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <TextView
-                        android:id="@+id/tv_summary_display"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_chip_info"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:paddingStart="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="14dp"
-                        android:paddingBottom="10dp"
-                        android:text="当前：未选择"
-                        android:textColor="@color/text_muted"
-                        android:textSize="13sp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/layout_sub_control_card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_panel_card"
-                android:orientation="vertical"
-                android:padding="22dp">
-
-                <LinearLayout
-                    android:id="@+id/layout_sub_control_header"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:gravity="center_vertical"
-                    android:minHeight="56dp"
-                    android:orientation="horizontal">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="副屏增强控制"
-                            android:textColor="@color/text_primary"
-                            android:textSize="20sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="副屏播放后的进度、倍速与音量微调"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/tv_sub_control_toggle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_chip_info"
-                        android:paddingStart="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="14dp"
-                        android:paddingBottom="10dp"
-                        android:text="收起"
-                        android:textColor="@color/text_muted"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/layout_sub_control_content"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="副屏进度与倍速"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/tv_sub_current_time"
-                            android:layout_width="54dp"
-                            android:layout_height="wrap_content"
-                            android:text="00:00"
-                            android:textColor="@color/text_muted"
-                            android:textSize="14sp" />
-
-                        <SeekBar
-                            android:id="@+id/seek_sub_progress"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:max="1000"
-                            android:progressTint="@color/brand_accent"
-                            android:thumbTint="@color/brand_accent" />
-
-                        <TextView
-                            android:id="@+id/tv_sub_total_time"
-                            android:layout_width="54dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="end"
-                            android:text="00:00"
-                            android:textColor="@color/text_muted"
-                            android:textSize="14sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:orientation="horizontal">
-
-                        <Button
-                            android:id="@+id/btn_sub_seek_back_10"
-                            android:layout_width="0dp"
-                            android:layout_height="54dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_button_secondary"
-                            android:backgroundTint="@null"
-                            android:minHeight="54dp"
-                            android:text="-10s"
-                            android:textAllCaps="false"
-                            android:textColor="@color/button_secondary_text"
-                            android:textSize="15sp" />
-
-                        <Space
-                            android:layout_width="10dp"
-                            android:layout_height="1dp" />
-
-                        <Button
-                            android:id="@+id/btn_sub_seek_forward_10"
-                            android:layout_width="0dp"
-                            android:layout_height="54dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_button_secondary"
-                            android:backgroundTint="@null"
-                            android:minHeight="54dp"
-                            android:text="+10s"
-                            android:textAllCaps="false"
-                            android:textColor="@color/button_secondary_text"
-                            android:textSize="15sp" />
-
-                        <Space
-                            android:layout_width="10dp"
-                            android:layout_height="1dp" />
-
-                        <Button
-                            android:id="@+id/btn_sub_speed"
-                            android:layout_width="0dp"
-                            android:layout_height="54dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_button_secondary"
-                            android:backgroundTint="@null"
-                            android:minHeight="54dp"
-                            android:text="副屏 1.00x"
-                            android:textAllCaps="false"
-                            android:textColor="@color/button_secondary_text"
-                            android:textSize="15sp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="副屏音量"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <SeekBar
-                            android:id="@+id/seek_sub_volume"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:max="100"
-                            android:progress="100"
-                            android:progressTint="@color/brand_accent"
-                            android:thumbTint="@color/brand_accent" />
-
-                        <TextView
-                            android:id="@+id/tv_sub_volume_value"
-                            android:layout_width="52dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="end"
-                            android:text="100%"
-                            android:textColor="@color/text_muted"
-                            android:textSize="14sp" />
-                    </LinearLayout>
-                </LinearLayout>
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -807,18 +63,20 @@
                 android:padding="22dp">
 
                 <TextView
+                    android:id="@+id/tvPreviewTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-medium"
-                    android:text="主屏预览"
+                    android:text="@string/preview_title"
                     android:textColor="@color/text_primary"
                     android:textSize="20sp" />
 
                 <TextView
+                    android:id="@+id/tvPreviewBindingInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="通过大圆角裁切和悬浮胶囊控制栏，让预览区更像一块精密设备。"
+                    android:text="@string/preview_binding_default"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -1133,16 +391,92 @@
             </FrameLayout>
 
             <TextView
+                android:id="@+id/tvDashboardTip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/dashboard_section_spacing"
                 android:background="@drawable/bg_hint_banner"
                 android:paddingStart="16dp"
                 android:paddingTop="12dp"
                 android:paddingEnd="16dp"
                 android:paddingBottom="12dp"
-                android:text="提示：首次切换音频路由时可能有短暂静音，这是系统策略层的正常切换行为。"
+                android:text="@string/dashboard_tip_default"
                 android:textColor="@color/text_muted"
                 android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_panel_card"
+                android:orientation="vertical"
+                android:padding="22dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/advanced_settings_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/advanced_settings_subtitle"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvAdvancedAudioDefault"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_chip_info"
+                    android:paddingStart="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="14dp"
+                    android:paddingBottom="10dp"
+                    android:text="@string/advanced_default_audio"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvAdvancedDisplayDefault"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_chip_info"
+                    android:paddingStart="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="14dp"
+                    android:paddingBottom="10dp"
+                    android:text="@string/advanced_default_display"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_chip_info"
+                    android:paddingStart="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="14dp"
+                    android:paddingBottom="10dp"
+                    android:text="@string/advanced_debug_info"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btnAdvancedReset"
+                    style="@style/DashboardActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_button_secondary"
+                    android:text="@string/action_restore_default"
+                    android:textColor="@color/button_secondary_text" />
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="dashboard_page_padding">20dp</dimen>
+    <dimen name="dashboard_section_spacing">16dp</dimen>
+    <dimen name="dashboard_card_padding">20dp</dimen>
+    <dimen name="dashboard_card_radius">20dp</dimen>
+    <dimen name="dashboard_soft_radius">16dp</dimen>
+    <dimen name="dashboard_chip_radius">999dp</dimen>
+    <dimen name="dashboard_button_height">48dp</dimen>
+    <dimen name="dashboard_card_gap">12dp</dimen>
+</resources>

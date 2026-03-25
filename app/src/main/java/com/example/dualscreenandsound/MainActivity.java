@@ -47,8 +47,11 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import com.example.dualscreenandsound.databinding.ActivityMainBinding;
+import com.google.android.material.snackbar.Snackbar;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
     private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
 
     private AudioManager mAudioManager;
+    private ActivityMainBinding binding;
     private MyPresentation presentation;  // 用来保存对 Presentation 的引用
     private boolean isVideoPlaying= false;  // 用来追踪视频是否正在播放
     private MediaPlayer mediaPlayer;
@@ -79,11 +83,13 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton btnFullScreen, btnOverlayPlayPause;
     private ImageButton btnOverlaySettings, btnOverlayVolumeEntry;
     private Button btnMainPlay, btnPresentationPlay, btnPresentationFile;
+    private Button btnMainStop, btnPresentationStop;
     private TextView btnOverlaySpeedEntry;
     private TextView tvOverlaySpeed050, tvOverlaySpeed075, tvOverlaySpeed100, tvOverlaySpeed125, tvOverlaySpeed150, tvOverlaySpeed200;
     private Button btnSubSeekBack10, btnSubSeekForward10, btnSubSpeed;
     private TextView tvStatusMain, tvStatusSub, tvStatusAudioCount;
-    private TextView tvSummaryMainAudio, tvSummarySubAudio, tvSummaryDisplay;
+    private TextView tvRouteSnapshot, tvPreviewBindingInfo, tvDashboardTip;
+    private TextView tvAdvancedAudioDefault, tvAdvancedDisplayDefault;
     private TextView tvMainVolumeValue, tvSubVolumeValue;
     private TextView tvSubCurrentTime, tvSubTotalTime, tvOverlayCurrentTime, tvOverlayTotalTime;
     private TextView tvOverlayVolumeValue;
@@ -99,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
     private View layoutSubControlContent;
     private TextView tvSubControlToggle;
     private List<AudioDeviceInfo> OutputDevices;
-    private AutoCompleteTextView mAudioDevicesSpinner1,mAudioDevicesSpinner2, displaySpinner;
+    private AutoCompleteTextView mAudioDevicesSpinner1, mAudioDevicesSpinner2, displaySpinner, mainDisplaySpinner;
     private String selectedFilePath,selectedPresentionFilePath,previousMainScreenFilePath, previousPresentationFilePath= "";  // 用于保存选择的文件路径
     private boolean isAudioDeviceSet = false;
     private ActivityResultLauncher<Intent> selectFileLauncher, selectFileLauncherCache;  // 声明 ActivityResultLauncher
@@ -202,18 +208,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        binding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(binding.getRoot());
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
 
         setupDisplayListener();
 
-        surfaceView = findViewById(R.id.surfaceView);  // SurfaceView 用于显示视频
-        surfaceContainer = findViewById(R.id.surfaceContainer);
-        scrollView = findViewById(R.id.scrollView);
-        btnFullScreen = findViewById(R.id.btn_fullscreen);
-        btnMainPlay = findViewById(R.id.btn_displaymanager);
-        controlsLayout = findViewById(R.id.controlsLayout);
+        configureDashboardBindings();
+
+        surfaceView = binding.surfaceView;  // SurfaceView 用于显示视频
+        surfaceContainer = binding.surfaceContainer;
+        scrollView = binding.scrollView;
+        btnFullScreen = binding.btnFullscreen;
+        controlsLayout = binding.controlsLayout;
         cacheNonPlayerViews();
 
         surfaceHolder = surfaceView.getHolder();
@@ -265,15 +273,10 @@ public class MainActivity extends AppCompatActivity {
         /********************
          添加音频路由设备的下拉列表
         *********************/
-        mAudioDevicesSpinner1 = findViewById(R.id.spinner_audio_devices);
-        mAudioDevicesSpinner2 = findViewById(R.id.spinner_audio_presentation_devices);
-        displaySpinner = findViewById(R.id.displaySpinner);
-        tvStatusMain = findViewById(R.id.tv_status_main);
-        tvStatusSub = findViewById(R.id.tv_status_sub);
-        tvStatusAudioCount = findViewById(R.id.tv_status_audio_count);
-        tvSummaryMainAudio = findViewById(R.id.tv_summary_main_audio);
-        tvSummarySubAudio = findViewById(R.id.tv_summary_sub_audio);
-        tvSummaryDisplay = findViewById(R.id.tv_summary_display);
+        mAudioDevicesSpinner1 = binding.mainScreenCard.spinnerRouteAudio;
+        mAudioDevicesSpinner2 = binding.subScreenCard.spinnerRouteAudio;
+        mainDisplaySpinner = binding.mainScreenCard.spinnerRouteDisplay;
+        displaySpinner = binding.subScreenCard.spinnerRouteDisplay;
         bindEnhancedPlayerViews();
         setupEnhancedPlayerControls();
         mAudioDevicesSpinner1.setOnTouchListener((v, event) -> {
@@ -288,6 +291,12 @@ public class MainActivity extends AppCompatActivity {
             }
             return false;
         });
+        mainDisplaySpinner.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                suppressSystemUiSoundEffectsTemporarily();
+            }
+            return false;
+        });
         displaySpinner.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 suppressSystemUiSoundEffectsTemporarily();
@@ -296,6 +305,7 @@ public class MainActivity extends AppCompatActivity {
         });
         mAudioDevicesSpinner1.setOnClickListener(v -> mAudioDevicesSpinner1.showDropDown());
         mAudioDevicesSpinner2.setOnClickListener(v -> mAudioDevicesSpinner2.showDropDown());
+        mainDisplaySpinner.setOnClickListener(v -> mainDisplaySpinner.showDropDown());
         displaySpinner.setOnClickListener(v -> displaySpinner.showDropDown());
         refreshAudioDeviceList();
         updateDashboardStatus();
@@ -304,7 +314,6 @@ public class MainActivity extends AppCompatActivity {
          添加主副屏视频播放的按钮
          *********************/
         Button btn1 = btnMainPlay;
-        btnPresentationPlay = findViewById(R.id.btn_presentation_displaymanager);
         Button btn2 = btnPresentationPlay;
         // btn1 的点击事件
         btn1.setOnClickListener(new View.OnClickListener() {
@@ -368,8 +377,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // 按钮点击事件，打开文件选择器
-        Button selectFileButton = findViewById(R.id.btn_selectfile);
-        btnPresentationFile = findViewById(R.id.btn_presentation_selectfile);
+        Button selectFileButton = binding.mainScreenCard.btnOpenFile;
         Button selectPrensentionFileButton = btnPresentationFile;
         selectFileButton.setOnClickListener(v -> handleFileSelection(selectFileLauncher, false));
         selectPrensentionFileButton.setOnClickListener(v ->{
@@ -395,8 +403,11 @@ public class MainActivity extends AppCompatActivity {
         disableInteractionSoundEffects(
                 btnMainPlay,
                 btn2,
+                btnMainStop,
+                btnPresentationStop,
                 selectFileButton,
                 selectPrensentionFileButton,
+                binding.btnAdvancedReset,
                 btnFullScreen,
                 btnOverlaySpeedEntry,
                 btnOverlayVolumeEntry,
@@ -415,60 +426,90 @@ public class MainActivity extends AppCompatActivity {
                 btnOverlaySettings,
                 switchOverlayLoop,
                 switchOverlayAutoPlay,
+                mainDisplaySpinner,
                 mAudioDevicesSpinner1,
                 mAudioDevicesSpinner2,
                 displaySpinner
         );
+        setupDashboardInteractions();
         updateDashboardStatus();
     }
 
     private void showPresentationInitFeedback(Button targetButton) {
         if (targetButton == null) return;
-        targetButton.setText("初始化中...");
+        targetButton.setText(R.string.action_initializing);
         targetButton.setEnabled(false);
         uiHandler.postDelayed(() -> {
             updateDashboardStatus();
             if (targetButton.isEnabled()) {
-                targetButton.setText("副屏播放");
+                targetButton.setText(R.string.action_play);
             }
         }, 900L);
     }
 
+    private void configureDashboardBindings() {
+        if (binding == null) return;
+        tvStatusMain = binding.headerDashboard.tvStatusMain;
+        tvStatusSub = binding.headerDashboard.tvStatusSub;
+        tvStatusAudioCount = binding.headerDashboard.tvStatusAudioCount;
+        tvRouteSnapshot = binding.headerDashboard.tvRouteSnapshot;
+        tvPreviewBindingInfo = binding.tvPreviewBindingInfo;
+        tvDashboardTip = binding.tvDashboardTip;
+        tvAdvancedAudioDefault = binding.tvAdvancedAudioDefault;
+        tvAdvancedDisplayDefault = binding.tvAdvancedDisplayDefault;
+
+        binding.mainScreenCard.tvTitle.setText(R.string.screen_main_title);
+        binding.subScreenCard.tvTitle.setText(R.string.screen_sub_title);
+
+        btnMainPlay = binding.mainScreenCard.btnPlayPause;
+        btnMainStop = binding.mainScreenCard.btnStop;
+        btnPresentationPlay = binding.subScreenCard.btnPlayPause;
+        btnPresentationFile = binding.subScreenCard.btnOpenFile;
+        btnPresentationStop = binding.subScreenCard.btnStop;
+    }
+
+    private void setupDashboardInteractions() {
+        if (binding == null) return;
+        binding.btnAdvancedReset.setOnClickListener(v -> showResetRouteConfirmation());
+        binding.mainScreenCard.btnStop.setOnClickListener(v -> showStopPlaybackConfirmation(true));
+        binding.subScreenCard.btnStop.setOnClickListener(v -> showStopPlaybackConfirmation(false));
+    }
+
     private void bindEnhancedPlayerViews() {
-        seekMainVolume = findViewById(R.id.seek_overlay_volume);
-        seekSubVolume = findViewById(R.id.seek_sub_volume);
-        seekSubProgress = findViewById(R.id.seek_sub_progress);
-        seekOverlayProgress = findViewById(R.id.seek_overlay_progress);
-        tvMainVolumeValue = findViewById(R.id.tv_overlay_volume_value);
-        tvSubVolumeValue = findViewById(R.id.tv_sub_volume_value);
-        tvSubCurrentTime = findViewById(R.id.tv_sub_current_time);
-        tvSubTotalTime = findViewById(R.id.tv_sub_total_time);
-        tvOverlayCurrentTime = findViewById(R.id.tv_overlay_current_time);
-        tvOverlayTotalTime = findViewById(R.id.tv_overlay_total_time);
-        mainTapLayer = findViewById(R.id.view_main_tap_layer);
-        layoutOverlayControls = findViewById(R.id.layout_overlay_controls);
-        layoutOverlaySpeedPanel = findViewById(R.id.layout_overlay_speed_panel);
-        layoutOverlayVolumePanel = findViewById(R.id.layout_overlay_volume_panel);
-        layoutOverlaySettingPanel = findViewById(R.id.layout_overlay_setting_panel);
-        layoutSubControlHeader = findViewById(R.id.layout_sub_control_header);
-        layoutSubControlContent = findViewById(R.id.layout_sub_control_content);
-        tvSubControlToggle = findViewById(R.id.tv_sub_control_toggle);
-        switchOverlayLoop = findViewById(R.id.switch_overlay_loop);
-        switchOverlayAutoPlay = findViewById(R.id.switch_overlay_autoplay);
-        ivCenterPlayState = findViewById(R.id.iv_center_play_state);
-        btnOverlaySpeedEntry = findViewById(R.id.btn_overlay_speed_entry);
-        tvOverlaySpeed050 = findViewById(R.id.tv_overlay_speed_050);
-        tvOverlaySpeed075 = findViewById(R.id.tv_overlay_speed_075);
-        tvOverlaySpeed100 = findViewById(R.id.tv_overlay_speed_100);
-        tvOverlaySpeed125 = findViewById(R.id.tv_overlay_speed_125);
-        tvOverlaySpeed150 = findViewById(R.id.tv_overlay_speed_150);
-        tvOverlaySpeed200 = findViewById(R.id.tv_overlay_speed_200);
-        btnSubSeekBack10 = findViewById(R.id.btn_sub_seek_back_10);
-        btnSubSeekForward10 = findViewById(R.id.btn_sub_seek_forward_10);
-        btnSubSpeed = findViewById(R.id.btn_sub_speed);
-        btnOverlayPlayPause = findViewById(R.id.btn_overlay_play_pause);
-        btnOverlaySettings = findViewById(R.id.btn_overlay_settings);
-        btnOverlayVolumeEntry = findViewById(R.id.btn_overlay_volume_entry);
+        seekMainVolume = binding.seekOverlayVolume;
+        seekSubVolume = null;
+        seekSubProgress = null;
+        seekOverlayProgress = binding.seekOverlayProgress;
+        tvMainVolumeValue = binding.tvOverlayVolumeValue;
+        tvSubVolumeValue = null;
+        tvSubCurrentTime = null;
+        tvSubTotalTime = null;
+        tvOverlayCurrentTime = binding.tvOverlayCurrentTime;
+        tvOverlayTotalTime = binding.tvOverlayTotalTime;
+        mainTapLayer = binding.viewMainTapLayer;
+        layoutOverlayControls = binding.layoutOverlayControls;
+        layoutOverlaySpeedPanel = binding.layoutOverlaySpeedPanel;
+        layoutOverlayVolumePanel = binding.layoutOverlayVolumePanel;
+        layoutOverlaySettingPanel = binding.layoutOverlaySettingPanel;
+        layoutSubControlHeader = null;
+        layoutSubControlContent = null;
+        tvSubControlToggle = null;
+        switchOverlayLoop = binding.switchOverlayLoop;
+        switchOverlayAutoPlay = binding.switchOverlayAutoplay;
+        ivCenterPlayState = binding.ivCenterPlayState;
+        btnOverlaySpeedEntry = binding.btnOverlaySpeedEntry;
+        tvOverlaySpeed050 = binding.tvOverlaySpeed050;
+        tvOverlaySpeed075 = binding.tvOverlaySpeed075;
+        tvOverlaySpeed100 = binding.tvOverlaySpeed100;
+        tvOverlaySpeed125 = binding.tvOverlaySpeed125;
+        tvOverlaySpeed150 = binding.tvOverlaySpeed150;
+        tvOverlaySpeed200 = binding.tvOverlaySpeed200;
+        btnSubSeekBack10 = null;
+        btnSubSeekForward10 = null;
+        btnSubSpeed = null;
+        btnOverlayPlayPause = binding.btnOverlayPlayPause;
+        btnOverlaySettings = binding.btnOverlaySettings;
+        btnOverlayVolumeEntry = binding.btnOverlayVolumeEntry;
     }
 
     private void setupEnhancedPlayerControls() {
@@ -1214,7 +1255,7 @@ public class MainActivity extends AppCompatActivity {
         boolean hasPlayer = mediaPlayer != null;
         boolean isPlaying = isPlayerPlayingSafely(mediaPlayer);
         if (btnMainPlay != null) {
-            btnMainPlay.setText(isPlaying ? "暂停" : "主屏播放");
+            btnMainPlay.setText(isPlaying ? R.string.action_pause : R.string.action_play);
         }
         if (btnOverlayPlayPause != null) {
             btnOverlayPlayPause.setEnabled(hasPlayer);
@@ -1225,6 +1266,7 @@ public class MainActivity extends AppCompatActivity {
         if (!isPlaying) {
             cancelMainOverlayAutoHide();
         }
+        renderMainScreen(buildMainScreenState());
     }
 
     private void updateFullScreenIcon() {
@@ -1375,31 +1417,39 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateDashboardStatus() {
+        boolean hasSubDisplay = hasSecondaryDisplay();
+        int count = OutputDevices != null ? OutputDevices.size() : 0;
         if (tvStatusMain != null) {
-            tvStatusMain.setText("● 主屏在线");
+            tvStatusMain.setText(getString(R.string.status_main_online));
             tvStatusMain.setTextColor(ContextCompat.getColor(this, R.color.status_success));
         }
-        boolean hasSubDisplay = false;
-        if (allDisplays != null) {
-            for (Display display : allDisplays) {
-                if (display.getDisplayId() != Display.DEFAULT_DISPLAY) {
-                    hasSubDisplay = true;
-                    break;
-                }
-            }
-        }
         if (tvStatusSub != null) {
-            tvStatusSub.setText(hasSubDisplay ? "● 副屏已连接" : "● 副屏未连接");
+            tvStatusSub.setText(getString(hasSubDisplay ? R.string.status_sub_online : R.string.status_sub_offline));
             tvStatusSub.setTextColor(ContextCompat.getColor(
                     this, hasSubDisplay ? R.color.status_success : R.color.status_warning));
         }
         if (tvStatusAudioCount != null) {
-            int count = OutputDevices != null ? OutputDevices.size() : 0;
-            tvStatusAudioCount.setText("● 音频设备 " + count);
+            tvStatusAudioCount.setText(getString(R.string.label_audio_devices_count, count));
             tvStatusAudioCount.setTextColor(ContextCompat.getColor(
                     this, count > 0 ? R.color.status_success : R.color.status_warning));
         }
+        renderMainScreen(buildMainScreenState());
+        renderSubScreen(buildSubScreenState(hasSubDisplay));
+        renderHeaderSnapshot(hasSubDisplay);
+        renderPreviewBindingInfo();
+        renderDashboardTip(hasSubDisplay);
+        renderAdvancedSettingsSummary(hasSubDisplay);
         updateSecondaryControlsEnabled(hasSubDisplay);
+    }
+
+    private boolean hasSecondaryDisplay() {
+        if (allDisplays == null) return false;
+        for (Display display : allDisplays) {
+            if (display.getDisplayId() != Display.DEFAULT_DISPLAY) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void updateSecondaryControlsEnabled(boolean hasSubDisplay) {
@@ -1412,6 +1462,10 @@ public class MainActivity extends AppCompatActivity {
         if (btnPresentationFile != null) {
             btnPresentationFile.setEnabled(hasSubDisplay);
             btnPresentationFile.setAlpha(hasSubDisplay ? enabledAlpha : disabledAlpha);
+        }
+        if (btnPresentationStop != null) {
+            btnPresentationStop.setEnabled(hasSubDisplay);
+            btnPresentationStop.setAlpha(hasSubDisplay ? enabledAlpha : disabledAlpha);
         }
         if (mAudioDevicesSpinner2 != null) {
             mAudioDevicesSpinner2.setEnabled(hasSubDisplay);
@@ -1444,17 +1498,266 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateRouteSummaryTexts() {
-        if (tvSummaryMainAudio != null) {
-            String item = mAudioDevicesSpinner1 != null ? mAudioDevicesSpinner1.getText().toString() : "";
-            tvSummaryMainAudio.setText("当前：" + (!item.isEmpty() ? item : "未选择"));
+        updateDashboardStatus();
+    }
+
+    private ScreenUiState buildMainScreenState() {
+        return new ScreenUiState(
+                getString(R.string.screen_main_title),
+                true,
+                resolvePlayState(mediaPlayer, selectedUri),
+                displayFileName(selectedFilePath),
+                getString(R.string.label_output_format, resolveMainDisplayName()),
+                getString(R.string.label_audio_format, resolveMainAudioName())
+        );
+    }
+
+    private ScreenUiState buildSubScreenState(boolean hasSubDisplay) {
+        return new ScreenUiState(
+                getString(R.string.screen_sub_title),
+                hasSubDisplay,
+                resolvePlayState(presentation != null ? presentation.mediaPlayer : null, presentionselectedUri),
+                displayFileName(selectedPresentionFilePath),
+                getString(R.string.label_output_format, resolveSubDisplayName(hasSubDisplay)),
+                getString(R.string.label_audio_format, resolveSubAudioName())
+        );
+    }
+
+    private PlayState resolvePlayState(MediaPlayer player, Uri fileUri) {
+        if (player != null && isPlayerPlayingSafely(player)) {
+            return PlayState.PLAYING;
         }
-        if (tvSummarySubAudio != null) {
-            String item = mAudioDevicesSpinner2 != null ? mAudioDevicesSpinner2.getText().toString() : "";
-            tvSummarySubAudio.setText("当前：" + (!item.isEmpty() ? item : "未选择"));
+        if (player != null || fileUri != null) {
+            return PlayState.PAUSED;
         }
-        if (tvSummaryDisplay != null) {
-            String item = displaySpinner != null ? displaySpinner.getText().toString() : "";
-            tvSummaryDisplay.setText("当前：" + (!item.isEmpty() ? item : "未选择"));
+        return PlayState.IDLE;
+    }
+
+    private void renderMainScreen(ScreenUiState state) {
+        if (binding == null || state == null) return;
+        binding.mainScreenCard.tvTitle.setText(state.getName());
+        binding.mainScreenCard.tvState.setText(getString(
+                R.string.label_state_format,
+                playStateLabel(state.getPlayState())));
+        binding.mainScreenCard.tvFile.setText(getString(
+                R.string.label_file_format,
+                valueOrFallback(state.getFileName(), getString(R.string.file_not_selected))));
+        binding.mainScreenCard.tvOutput.setText(getString(
+                R.string.label_video_output_format,
+                resolveMainDisplayName()));
+        binding.mainScreenCard.tvAudio.setText(getString(
+                R.string.label_audio_output_format,
+                resolveMainAudioName()));
+        binding.mainScreenCard.btnPlayPause.setText(state.getPlayState() == PlayState.PLAYING
+                ? getString(R.string.action_pause)
+                : getString(R.string.action_play));
+    }
+
+    private void renderSubScreen(ScreenUiState state) {
+        if (binding == null || state == null) return;
+        binding.subScreenCard.tvTitle.setText(state.getName());
+        binding.subScreenCard.tvState.setText(getString(
+                R.string.label_state_format,
+                state.isOnline() ? playStateLabel(state.getPlayState()) : getString(R.string.screen_offline_hint)));
+        binding.subScreenCard.tvFile.setText(getString(
+                R.string.label_file_format,
+                valueOrFallback(state.getFileName(), getString(R.string.file_not_selected))));
+        binding.subScreenCard.tvOutput.setText(getString(
+                R.string.label_video_output_format,
+                resolveSubDisplayName(state.isOnline())));
+        binding.subScreenCard.tvAudio.setText(getString(
+                R.string.label_audio_output_format,
+                resolveSubAudioName()));
+        binding.subScreenCard.btnPlayPause.setText(state.getPlayState() == PlayState.PLAYING
+                ? getString(R.string.action_pause)
+                : getString(R.string.action_play));
+        binding.subScreenCard.btnOpenFile.setEnabled(state.isOnline());
+        binding.subScreenCard.btnOpenFile.setAlpha(state.isOnline() ? 1f : 0.45f);
+    }
+
+    private void renderHeaderSnapshot(boolean hasSubDisplay) {
+        if (tvRouteSnapshot == null) return;
+        String mainDisplay = resolveMainDisplayName();
+        String mainAudio = resolveMainAudioName();
+        String subDisplay = resolveSubDisplayName(hasSubDisplay);
+        String subAudio = resolveSubAudioName();
+        tvRouteSnapshot.setText(getString(
+                R.string.route_snapshot_format,
+                mainDisplay,
+                mainAudio,
+                subDisplay,
+                subAudio));
+    }
+
+    private void renderPreviewBindingInfo() {
+        if (tvPreviewBindingInfo == null) return;
+        tvPreviewBindingInfo.setText(getString(
+                R.string.preview_binding_format,
+                resolveMainDisplayName(),
+                resolveMainAudioName()));
+    }
+
+    private void renderDashboardTip(boolean hasSubDisplay) {
+        if (tvDashboardTip == null) return;
+        String warning = buildSharedAudioWarning(resolveMainAudioName(), resolveSubAudioName());
+        if (!hasSubDisplay) {
+            tvDashboardTip.setText(getString(R.string.dashboard_tip_sub_offline));
+            tvDashboardTip.setTextColor(ContextCompat.getColor(this, R.color.text_muted));
+            return;
+        }
+        if (warning != null) {
+            tvDashboardTip.setText(warning);
+            tvDashboardTip.setTextColor(ContextCompat.getColor(this, R.color.status_warning));
+            return;
+        }
+        tvDashboardTip.setText(getString(R.string.dashboard_tip_default));
+        tvDashboardTip.setTextColor(ContextCompat.getColor(this, R.color.text_muted));
+    }
+
+    private void renderAdvancedSettingsSummary(boolean hasSubDisplay) {
+        if (tvAdvancedAudioDefault != null) {
+            tvAdvancedAudioDefault.setText(getString(
+                    R.string.advanced_default_audio_format,
+                    resolveMainAudioName(),
+                    resolveSubAudioName()));
+        }
+        if (tvAdvancedDisplayDefault != null) {
+            String subDisplay = hasSubDisplay ? resolveSubDisplayName(true) : getString(R.string.screen_offline_target);
+            tvAdvancedDisplayDefault.setText(getString(
+                    R.string.advanced_default_display_format,
+                    resolveMainDisplayName(),
+                    subDisplay));
+        }
+    }
+
+    private String resolveMainDisplayName() {
+        return getString(R.string.display_main_default);
+    }
+
+    private String resolveSubDisplayName(boolean hasSubDisplay) {
+        if (!hasSubDisplay) {
+            return getString(R.string.screen_offline_target);
+        }
+        return valueOrFallback(
+                displaySpinner != null ? displaySpinner.getText().toString() : "",
+                getString(R.string.display_sub_default));
+    }
+
+    private String resolveMainAudioName() {
+        return valueOrFallback(
+                mAudioDevicesSpinner1 != null ? mAudioDevicesSpinner1.getText().toString() : "",
+                getString(R.string.route_audio_main_default));
+    }
+
+    private String resolveSubAudioName() {
+        return valueOrFallback(
+                mAudioDevicesSpinner2 != null ? mAudioDevicesSpinner2.getText().toString() : "",
+                getString(R.string.route_audio_sub_default));
+    }
+
+    private String buildSharedAudioWarning(String mainAudio, String subAudio) {
+        if (mainAudio == null || subAudio == null) return null;
+        String safeMain = mainAudio.trim();
+        String safeSub = subAudio.trim();
+        if (safeMain.isEmpty() || safeSub.isEmpty()) return null;
+        if (safeMain.equals(getString(R.string.route_unassigned))
+                || safeSub.equals(getString(R.string.route_unassigned))) {
+            return null;
+        }
+        if (!safeMain.equals(safeSub)) return null;
+        return getString(R.string.route_conflict_message, safeMain);
+    }
+
+    private String playStateLabel(PlayState state) {
+        if (state == PlayState.PLAYING) {
+            return getString(R.string.play_state_playing);
+        }
+        if (state == PlayState.PAUSED) {
+            return getString(R.string.play_state_paused);
+        }
+        return getString(R.string.play_state_idle);
+    }
+
+    private String displayFileName(String path) {
+        if (path == null || path.isEmpty()) return null;
+        int slash = path.lastIndexOf('/');
+        return slash >= 0 ? path.substring(slash + 1) : path;
+    }
+
+    private String valueOrFallback(String value, String fallback) {
+        return (value == null || value.trim().isEmpty()) ? fallback : value;
+    }
+
+    private void showDashboardMessage(String message) {
+        if (binding != null) {
+            Snackbar.make(binding.getRoot(), message, Snackbar.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void scrollToRouteSettingsSection() {
+        if (scrollView == null || mAudioDevicesSpinner1 == null) return;
+        scrollView.post(() -> scrollView.smoothScrollTo(0, Math.max(0, mAudioDevicesSpinner1.getTop() - dpToPx(16))));
+    }
+
+    private void showResetRouteConfirmation() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_reset_route_title)
+                .setMessage(R.string.dialog_reset_route_message)
+                .setPositiveButton(R.string.dialog_confirm, (dialog, which) -> resetRoutesToDefault())
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
+    }
+
+    private void resetRoutesToDefault() {
+        refreshAudioDeviceList();
+        showDashboardMessage(getString(R.string.route_reset_done));
+    }
+
+    private void showStopPlaybackConfirmation(boolean mainScreen) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_stop_title)
+                .setMessage(R.string.dialog_stop_message)
+                .setPositiveButton(R.string.dialog_confirm, (dialog, which) -> {
+                    if (mainScreen) {
+                        stopMainPlayback();
+                    } else {
+                        stopPresentationPlayback();
+                    }
+                })
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
+    }
+
+    private void stopMainPlayback() {
+        releaseMediaPlayer();
+        selectedUri = null;
+        selectedFilePath = null;
+        btnMainPlay.setText(R.string.action_play);
+        updateDashboardStatus();
+        showDashboardMessage(getString(R.string.playback_stopped));
+    }
+
+    private void stopPresentationPlayback() {
+        if (presentation != null) {
+            presentation.releaseMediaPlayer();
+        }
+        presentionselectedUri = null;
+        selectedPresentionFilePath = null;
+        btnPresentationPlay.setText(R.string.action_play);
+        updateDashboardStatus();
+        showDashboardMessage(getString(R.string.playback_stopped));
+    }
+
+    private void showAudioConflictIfNeeded() {
+        if (!hasSecondaryDisplay()) return;
+        if (mAudioDevicesSpinner1 == null || mAudioDevicesSpinner2 == null) return;
+        String mainAudio = mAudioDevicesSpinner1.getText().toString();
+        String subAudio = mAudioDevicesSpinner2.getText().toString();
+        String warning = buildSharedAudioWarning(mainAudio, subAudio);
+        if (warning != null) {
+            showDashboardMessage(warning);
         }
     }
 
@@ -1755,13 +2058,14 @@ public class MainActivity extends AppCompatActivity {
             if (isAudioDeviceSet) {
                 if (mediaPlayer.isPlaying()) {
                     mediaPlayer.pause();
-                    buttonText.setText("主屏播放");
+                    buttonText.setText(R.string.action_play);
                     updateMainProgressUi();
                 } else {
                     mediaPlayer.start();
                     scheduleMainSyncNudge("main-manual-start");
-                    buttonText.setText("暂停");
+                    buttonText.setText(R.string.action_pause);
                     updateMainProgressUi();
+                    showDashboardMessage(getString(R.string.playback_started));
                 }
                 updateOverlayMainProgressUi();
                 updateMainPlayVisuals();
@@ -1916,15 +2220,16 @@ public class MainActivity extends AppCompatActivity {
         applyPresentationPlayerSettings();
         if (player.isPlaying()) {
             player.pause();
-            buttonText.setText("副屏播放");
+            buttonText.setText(R.string.action_play);
             updateSubProgressUi();
+            updateDashboardStatus();
             return;
         }
 
         boolean mainWasPlaying = mediaPlayer != null && mediaPlayer.isPlaying();
         try {
             player.start();
-            buttonText.setText("暂停");
+            buttonText.setText(R.string.action_pause);
             updateSubProgressUi();
             scheduleMainSyncNudge("presentation-start");
             uiHandler.postDelayed(() -> {
@@ -1937,6 +2242,8 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("AudioDevice", "副屏起播稳定化失败", e);
                 }
             }, 220L);
+            updateDashboardStatus();
+            showDashboardMessage(getString(R.string.playback_started));
         } catch (IllegalStateException e) {
             Log.e("AudioDevice", "副屏播放启动失败", e);
             Toast.makeText(getApplicationContext(), "副屏播放失败，请重试", Toast.LENGTH_SHORT).show();
@@ -2052,6 +2359,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     }
+                    updateDashboardStatus();
 
                 } else {
                     Log.d("SelectedFilePath", "无法获取文件路径");
@@ -2383,6 +2691,9 @@ public class MainActivity extends AppCompatActivity {
         displayItems.clear();
         allDisplays = displayManager.getDisplays();
         for (Display display : allDisplays) {
+            if (display.getDisplayId() == Display.DEFAULT_DISPLAY) {
+                continue;
+            }
             String displayName = "显示器 " + display.getDisplayId();
             int displayId = display.getDisplayId();
             boolean exists = false;
@@ -2427,6 +2738,12 @@ public class MainActivity extends AppCompatActivity {
             String deviceTypeName = getDeviceTypeName(device.getType());
             deviceNames.add(deviceTypeName);
         }
+        ArrayAdapter<String> mainDisplayAdapter = new ArrayAdapter<>(
+                this,
+                R.layout.spinner_item,
+                Arrays.asList(getString(R.string.display_main_locked)));
+        mainDisplayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
+        mainDisplaySpinner.setAdapter(mainDisplayAdapter);
         ArrayAdapter<DisplayItem> displayAdapter = new ArrayAdapter<>(this, R.layout.spinner_item, displayItems);
         displayAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         displaySpinner.setAdapter(displayAdapter);
@@ -2435,6 +2752,7 @@ public class MainActivity extends AppCompatActivity {
         adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         mAudioDevicesSpinner1.setAdapter(adapter);
         mAudioDevicesSpinner2.setAdapter(adapter);
+        mainDisplaySpinner.setText(getString(R.string.display_main_locked), false);
 
         int mainIndex = findDeviceIndex(OutputDevices, selectedDevice);
         if (mainIndex >= 0) {
@@ -2452,19 +2770,32 @@ public class MainActivity extends AppCompatActivity {
             DisplayItem selectedDisplay = displayItems.get(displayIndex);
             selectedDisplayId = selectedDisplay.displayId;
             displaySpinner.setText(selectedDisplay.toString(), false);
+        } else if (displaySpinner != null) {
+            displaySpinner.setText(getString(R.string.screen_offline_target), false);
         }
         updateRouteSummaryTexts();
+
+        mainDisplaySpinner.setOnItemClickListener((parent, view, position, id) -> {
+            suppressSystemUiSoundEffectsTemporarily();
+            mainDisplaySpinner.setText(getString(R.string.display_main_locked), false);
+            updateRouteSummaryTexts();
+            showDashboardMessage(getString(R.string.route_switch_done));
+        });
 
         mAudioDevicesSpinner1.setOnItemClickListener((parent, view, position, id) -> {
             suppressSystemUiSoundEffectsTemporarily();
             handleAudioDeviceSelection(position, false);
             updateRouteSummaryTexts();
+            showAudioConflictIfNeeded();
+            showDashboardMessage(getString(R.string.route_switch_done));
         });
 
         mAudioDevicesSpinner2.setOnItemClickListener((parent, view, position, id) -> {
             suppressSystemUiSoundEffectsTemporarily();
             handleAudioDeviceSelection(position, true);
             updateRouteSummaryTexts();
+            showAudioConflictIfNeeded();
+            showDashboardMessage(getString(R.string.route_switch_done));
         });
 
         displaySpinner.setOnItemClickListener((parent, view, position, id) -> {
@@ -2479,6 +2810,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 Log.d("AudioDevice", "副屏音频设备尚未选择，跳过设置");
             }
+            showDashboardMessage(getString(R.string.route_switch_done));
         });
     }
 

@@ -38,6 +38,9 @@
     <color name="button_primary_text">#2D405A</color>
     <color name="button_secondary_text">#506177</color>
     <color name="button_file_text">#2D405A</color>
+    <color name="button_danger_bg">#F5E6E2</color>
+    <color name="button_danger_bg_pressed">#EFD6CE</color>
+    <color name="button_danger_text">#9A5D55</color>
     <color name="route_main_text">#45607F</color>
     <color name="route_sub_text">#547064</color>
     <color name="route_display_text">#5D6C81</color>
