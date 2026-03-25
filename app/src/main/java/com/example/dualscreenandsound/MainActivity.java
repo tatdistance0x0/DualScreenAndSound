@@ -10,15 +10,18 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioSystem;
 import android.media.MediaPlayer;
+import android.media.PlaybackParams;
 import android.media.SyncParams;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Display;
+import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -32,8 +35,13 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResult;
@@ -46,10 +54,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 
 public class MainActivity extends AppCompatActivity {
+    private static final int SEEK_STEP_MS = 10_000;
+    private static final long MAIN_PROGRESS_UPDATE_INTERVAL_MS = 400L;
+    private static final long OVERLAY_AUTO_HIDE_MS = 3000L;
+    private static final long OVERLAY_FADE_DURATION_MS = 180L;
+    private static final long CENTER_PLAY_ICON_DURATION_MS = 650L;
+    private static final int OVERLAY_PANEL_EDGE_DP = 8;
+    private static final int OVERLAY_PANEL_GAP_DP = 8;
+    private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+
     private AudioManager mAudioManager;
     private MyPresentation presentation;  // 用来保存对 Presentation 的引用
     private boolean isVideoPlaying= false;  // 用来追踪视频是否正在播放
@@ -57,9 +75,28 @@ public class MainActivity extends AppCompatActivity {
     private SurfaceView surfaceView;
     private FrameLayout surfaceContainer;
     private ScrollView scrollView;
-    private Button btnFullScreen, btnMainPlay, btnPresentationPlay, btnPresentationFile;
+    private ImageButton btnFullScreen, btnOverlayPlayPause;
+    private ImageButton btnOverlaySettings, btnOverlayVolumeEntry;
+    private Button btnMainPlay, btnPresentationPlay, btnPresentationFile;
+    private TextView btnOverlaySpeedEntry;
+    private TextView tvOverlaySpeed050, tvOverlaySpeed075, tvOverlaySpeed100, tvOverlaySpeed125, tvOverlaySpeed150, tvOverlaySpeed200;
+    private Button btnSubSeekBack10, btnSubSeekForward10, btnSubSpeed;
     private TextView tvStatusMain, tvStatusSub, tvStatusAudioCount;
     private TextView tvSummaryMainAudio, tvSummarySubAudio, tvSummaryDisplay;
+    private TextView tvMainVolumeValue, tvSubVolumeValue;
+    private TextView tvSubCurrentTime, tvSubTotalTime, tvOverlayCurrentTime, tvOverlayTotalTime;
+    private TextView tvOverlayVolumeValue;
+    private Switch switchOverlayLoop, switchOverlayAutoPlay;
+    private ImageView ivCenterPlayState;
+    private SeekBar seekMainVolume, seekSubVolume, seekSubProgress, seekOverlayProgress;
+    private View mainTapLayer;
+    private View layoutOverlayControls;
+    private View layoutOverlaySpeedPanel;
+    private View layoutOverlayVolumePanel;
+    private View layoutOverlaySettingPanel;
+    private View layoutSubControlHeader;
+    private View layoutSubControlContent;
+    private TextView tvSubControlToggle;
     private List<AudioDeviceInfo> OutputDevices;
     private Spinner mAudioDevicesSpinner1,mAudioDevicesSpinner2, displaySpinner;
     private String selectedFilePath,selectedPresentionFilePath,previousMainScreenFilePath, previousPresentationFilePath= "";  // 用于保存选择的文件路径
@@ -123,6 +160,34 @@ public class MainActivity extends AppCompatActivity {
     private final Runnable applyRouteSwitchQueueRunnable = this::drainRouteSwitchQueue;
     private boolean mainVideoRenderingStarted = false;
     private boolean mainSyncParamsUnsupported = false;
+    private boolean subProgressUserSeeking = false;
+    private boolean overlayProgressUserSeeking = false;
+    private boolean overlayControlsVisible = true;
+    private boolean subControlExpanded = true;
+    private int currentSpeedPresetIndex = 2;
+    private int currentSubSpeedPresetIndex = 2;
+    private boolean loopModeEnabled = false;
+    private boolean autoPlayEnabled = false;
+    private float mainPlayerVolume = 1.0f;
+    private float presentationPlayerVolume = 1.0f;
+    private GestureDetector mainTapGestureDetector;
+    private final Runnable hideMainOverlayRunnable = this::hideMainOverlayControlsAnimated;
+    private final Runnable hideCenterPlayStateRunnable = () -> {
+        if (ivCenterPlayState != null) {
+            ivCenterPlayState.animate().cancel();
+            ivCenterPlayState.setVisibility(View.GONE);
+            ivCenterPlayState.setAlpha(0f);
+        }
+    };
+    private final Runnable mainProgressUpdater = new Runnable() {
+        @Override
+        public void run() {
+            updateMainProgressUi();
+            updateSubProgressUi();
+            updateOverlayMainProgressUi();
+            uiHandler.postDelayed(this, MAIN_PROGRESS_UPDATE_INTERVAL_MS);
+        }
+    };
 
     private class DisplayItem {
         String displayName;
@@ -213,6 +278,8 @@ public class MainActivity extends AppCompatActivity {
         tvSummaryMainAudio = findViewById(R.id.tv_summary_main_audio);
         tvSummarySubAudio = findViewById(R.id.tv_summary_sub_audio);
         tvSummaryDisplay = findViewById(R.id.tv_summary_display);
+        bindEnhancedPlayerViews();
+        setupEnhancedPlayerControls();
         mAudioDevicesSpinner1.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 suppressSystemUiSoundEffectsTemporarily();
@@ -269,6 +336,7 @@ public class MainActivity extends AppCompatActivity {
                         if (presentationSurface != null && presentationSurface.isValid()) {
                             presentation.initMediaPlayer(presentionselectedUri, presentationSurface);
                             showPresentationInitFeedback(btn2);
+                            applyPresentationPlayerSettings();
                             if (selectedDeviceCache != null) {
                                 presentation.setAudioDevice(selectedDeviceCache);
                                 maybePrimePresentationOutput("button-init");
@@ -337,6 +405,23 @@ public class MainActivity extends AppCompatActivity {
                 selectFileButton,
                 selectPrensentionFileButton,
                 btnFullScreen,
+                btnOverlaySpeedEntry,
+                btnOverlayVolumeEntry,
+                tvOverlaySpeed200,
+                tvOverlaySpeed150,
+                tvOverlaySpeed125,
+                tvOverlaySpeed100,
+                tvOverlaySpeed075,
+                tvOverlaySpeed050,
+                btnSubSeekBack10,
+                btnSubSeekForward10,
+                btnSubSpeed,
+                layoutSubControlHeader,
+                tvSubControlToggle,
+                btnOverlayPlayPause,
+                btnOverlaySettings,
+                switchOverlayLoop,
+                switchOverlayAutoPlay,
                 mAudioDevicesSpinner1,
                 mAudioDevicesSpinner2,
                 displaySpinner
@@ -354,6 +439,876 @@ public class MainActivity extends AppCompatActivity {
                 targetButton.setText("副屏播放");
             }
         }, 900L);
+    }
+
+    private void bindEnhancedPlayerViews() {
+        seekMainVolume = findViewById(R.id.seek_overlay_volume);
+        seekSubVolume = findViewById(R.id.seek_sub_volume);
+        seekSubProgress = findViewById(R.id.seek_sub_progress);
+        seekOverlayProgress = findViewById(R.id.seek_overlay_progress);
+        tvMainVolumeValue = findViewById(R.id.tv_overlay_volume_value);
+        tvSubVolumeValue = findViewById(R.id.tv_sub_volume_value);
+        tvSubCurrentTime = findViewById(R.id.tv_sub_current_time);
+        tvSubTotalTime = findViewById(R.id.tv_sub_total_time);
+        tvOverlayCurrentTime = findViewById(R.id.tv_overlay_current_time);
+        tvOverlayTotalTime = findViewById(R.id.tv_overlay_total_time);
+        mainTapLayer = findViewById(R.id.view_main_tap_layer);
+        layoutOverlayControls = findViewById(R.id.layout_overlay_controls);
+        layoutOverlaySpeedPanel = findViewById(R.id.layout_overlay_speed_panel);
+        layoutOverlayVolumePanel = findViewById(R.id.layout_overlay_volume_panel);
+        layoutOverlaySettingPanel = findViewById(R.id.layout_overlay_setting_panel);
+        layoutSubControlHeader = findViewById(R.id.layout_sub_control_header);
+        layoutSubControlContent = findViewById(R.id.layout_sub_control_content);
+        tvSubControlToggle = findViewById(R.id.tv_sub_control_toggle);
+        switchOverlayLoop = findViewById(R.id.switch_overlay_loop);
+        switchOverlayAutoPlay = findViewById(R.id.switch_overlay_autoplay);
+        ivCenterPlayState = findViewById(R.id.iv_center_play_state);
+        btnOverlaySpeedEntry = findViewById(R.id.btn_overlay_speed_entry);
+        tvOverlaySpeed050 = findViewById(R.id.tv_overlay_speed_050);
+        tvOverlaySpeed075 = findViewById(R.id.tv_overlay_speed_075);
+        tvOverlaySpeed100 = findViewById(R.id.tv_overlay_speed_100);
+        tvOverlaySpeed125 = findViewById(R.id.tv_overlay_speed_125);
+        tvOverlaySpeed150 = findViewById(R.id.tv_overlay_speed_150);
+        tvOverlaySpeed200 = findViewById(R.id.tv_overlay_speed_200);
+        btnSubSeekBack10 = findViewById(R.id.btn_sub_seek_back_10);
+        btnSubSeekForward10 = findViewById(R.id.btn_sub_seek_forward_10);
+        btnSubSpeed = findViewById(R.id.btn_sub_speed);
+        btnOverlayPlayPause = findViewById(R.id.btn_overlay_play_pause);
+        btnOverlaySettings = findViewById(R.id.btn_overlay_settings);
+        btnOverlayVolumeEntry = findViewById(R.id.btn_overlay_volume_entry);
+    }
+
+    private void setupEnhancedPlayerControls() {
+        setupMainOverlayTapGesture();
+        setupSubControlFold();
+        if (seekOverlayProgress != null) setupMainProgressSeekBar(seekOverlayProgress, true);
+        if (seekSubProgress != null) setupSubProgressSeekBar(seekSubProgress);
+
+        if (seekMainVolume != null) {
+            seekMainVolume.setMax(100);
+            seekMainVolume.setProgress((int) (mainPlayerVolume * 100));
+            seekMainVolume.setOnTouchListener((v, event) -> {
+                if (scrollView == null) return false;
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
+                    scrollView.requestDisallowInterceptTouchEvent(true);
+                } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    scrollView.requestDisallowInterceptTouchEvent(false);
+                }
+                return false;
+            });
+            seekMainVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (!fromUser) return;
+                    mainPlayerVolume = progress / 100f;
+                    applyMainPlayerVolume();
+                    updateVolumeLabels();
+                    showMainOverlayControls(false);
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    showMainOverlayControls(false);
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    showMainOverlayControls(true);
+                }
+            });
+        }
+
+        if (seekSubVolume != null) {
+            seekSubVolume.setMax(100);
+            seekSubVolume.setProgress((int) (presentationPlayerVolume * 100));
+            seekSubVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (!fromUser) return;
+                    presentationPlayerVolume = progress / 100f;
+                    applyPresentationPlayerSettings();
+                    updateVolumeLabels();
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {}
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {}
+            });
+        }
+
+        if (btnSubSeekBack10 != null) {
+            btnSubSeekBack10.setOnClickListener(v -> seekPresentationBy(-SEEK_STEP_MS));
+        }
+        if (btnSubSeekForward10 != null) {
+            btnSubSeekForward10.setOnClickListener(v -> seekPresentationBy(SEEK_STEP_MS));
+        }
+        if (btnOverlaySpeedEntry != null) {
+            btnOverlaySpeedEntry.setOnClickListener(v -> toggleMainOverlayPanel(layoutOverlaySpeedPanel, btnOverlaySpeedEntry));
+        }
+        if (btnOverlayVolumeEntry != null) {
+            btnOverlayVolumeEntry.setOnClickListener(v -> toggleMainOverlayPanel(layoutOverlayVolumePanel, btnOverlayVolumeEntry));
+        }
+        bindMainSpeedItem(tvOverlaySpeed200, 5);
+        bindMainSpeedItem(tvOverlaySpeed150, 4);
+        bindMainSpeedItem(tvOverlaySpeed125, 3);
+        bindMainSpeedItem(tvOverlaySpeed100, 2);
+        bindMainSpeedItem(tvOverlaySpeed075, 1);
+        bindMainSpeedItem(tvOverlaySpeed050, 0);
+        if (btnSubSpeed != null) {
+            btnSubSpeed.setOnClickListener(v -> {
+                currentSubSpeedPresetIndex = (currentSubSpeedPresetIndex + 1) % SPEED_PRESETS.length;
+                applyPresentationPlaybackSpeed();
+                updateSubSpeedButtonLabel();
+            });
+        }
+        if (btnOverlayPlayPause != null) {
+            btnOverlayPlayPause.setOnClickListener(v -> {
+                toggleMediaPlayer(mediaPlayer, isAudioDeviceSet, btnMainPlay);
+                showMainOverlayControls(true);
+            });
+        }
+        if (btnOverlaySettings != null) {
+            btnOverlaySettings.setOnClickListener(v -> toggleMainOverlayPanel(layoutOverlaySettingPanel, btnOverlaySettings));
+        }
+
+        if (switchOverlayLoop != null) {
+            switchOverlayLoop.setChecked(loopModeEnabled);
+            switchOverlayLoop.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                loopModeEnabled = isChecked;
+                applyLoopModeToPlayers();
+                updateLoopButtonLabel();
+                showMainOverlayControls(true);
+            });
+        }
+        if (switchOverlayAutoPlay != null) {
+            switchOverlayAutoPlay.setChecked(autoPlayEnabled);
+            switchOverlayAutoPlay.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                autoPlayEnabled = isChecked;
+                if (presentation != null) {
+                    presentation.setAutoPlayEnabled(isChecked);
+                }
+                showMainOverlayControls(true);
+            });
+        }
+
+        updateMainProgressUi();
+        updateSubProgressUi();
+        updateOverlayMainProgressUi();
+        updateVolumeLabels();
+        updateSpeedButtonLabel();
+        updateSubSpeedButtonLabel();
+        updateLoopButtonLabel();
+        updateMainPlayVisuals();
+        updateFullScreenIcon();
+        applyMainOverlayUiScale(false);
+        showMainOverlayControls(true);
+        startMainProgressUpdater();
+    }
+
+    private void setupSubControlFold() {
+        if (layoutSubControlContent == null) return;
+        updateSubControlFoldUi(true);
+        View.OnClickListener toggleListener = v -> toggleSubControlFold();
+        if (layoutSubControlHeader != null) {
+            layoutSubControlHeader.setOnClickListener(toggleListener);
+        }
+        if (tvSubControlToggle != null) {
+            tvSubControlToggle.setOnClickListener(toggleListener);
+        }
+    }
+
+    private void toggleSubControlFold() {
+        subControlExpanded = !subControlExpanded;
+        updateSubControlFoldUi(false);
+    }
+
+    private void updateSubControlFoldUi(boolean immediate) {
+        if (layoutSubControlContent == null) return;
+        if (tvSubControlToggle != null) {
+            tvSubControlToggle.setText(subControlExpanded ? "收起" : "展开");
+        }
+
+        layoutSubControlContent.animate().cancel();
+        if (subControlExpanded) {
+            layoutSubControlContent.setVisibility(View.VISIBLE);
+            if (immediate) {
+                layoutSubControlContent.setAlpha(1f);
+            } else {
+                layoutSubControlContent.setAlpha(0f);
+                layoutSubControlContent.animate().alpha(1f).setDuration(140L).start();
+            }
+            return;
+        }
+
+        if (immediate) {
+            layoutSubControlContent.setAlpha(1f);
+            layoutSubControlContent.setVisibility(View.GONE);
+        } else {
+            layoutSubControlContent.animate()
+                    .alpha(0f)
+                    .setDuration(120L)
+                    .withEndAction(() -> {
+                        layoutSubControlContent.setVisibility(View.GONE);
+                        layoutSubControlContent.setAlpha(1f);
+                    })
+                    .start();
+        }
+    }
+
+    private void setupMainOverlayTapGesture() {
+        mainTapGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDown(MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public boolean onSingleTapConfirmed(MotionEvent e) {
+                if (isTapInCenterZone(mainTapLayer, e)) {
+                    toggleMainPlaybackFromGesture();
+                    return true;
+                }
+                hideAllMainOverlayPanels();
+                if (overlayControlsVisible) {
+                    hideMainOverlayControlsAnimated();
+                } else {
+                    showMainOverlayControls(true);
+                }
+                return true;
+            }
+
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                toggleMainPlaybackFromGesture();
+                return true;
+            }
+        });
+        if (mainTapLayer != null) {
+            mainTapLayer.setClickable(true);
+            mainTapLayer.setOnTouchListener((v, event) -> mainTapGestureDetector != null && mainTapGestureDetector.onTouchEvent(event));
+        }
+    }
+
+    private boolean isTapInCenterZone(View target, MotionEvent event) {
+        if (target == null || event == null) return false;
+        float width = target.getWidth();
+        float height = target.getHeight();
+        if (width <= 0f || height <= 0f) return false;
+        float left = width * 0.3f;
+        float right = width * 0.7f;
+        float top = height * 0.25f;
+        float bottom = height * 0.75f;
+        return event.getX() >= left && event.getX() <= right
+                && event.getY() >= top && event.getY() <= bottom;
+    }
+
+    private void bindMainSpeedItem(TextView view, int presetIndex) {
+        if (view == null) return;
+        view.setOnClickListener(v -> {
+            currentSpeedPresetIndex = presetIndex;
+            applyMainPlaybackSpeed();
+            updateSpeedButtonLabel();
+            showMainOverlayControls(true);
+        });
+    }
+
+    private void updateMainSpeedButtonVisualState() {
+        updateMainSpeedItemVisual(tvOverlaySpeed200, currentSpeedPresetIndex == 5);
+        updateMainSpeedItemVisual(tvOverlaySpeed150, currentSpeedPresetIndex == 4);
+        updateMainSpeedItemVisual(tvOverlaySpeed125, currentSpeedPresetIndex == 3);
+        updateMainSpeedItemVisual(tvOverlaySpeed100, currentSpeedPresetIndex == 2);
+        updateMainSpeedItemVisual(tvOverlaySpeed075, currentSpeedPresetIndex == 1);
+        updateMainSpeedItemVisual(tvOverlaySpeed050, currentSpeedPresetIndex == 0);
+    }
+
+    private void updateMainSpeedItemVisual(TextView view, boolean selected) {
+        if (view == null) return;
+        view.setTextColor(ContextCompat.getColor(this, selected ? R.color.brand_accent : R.color.white));
+        view.setAlpha(selected ? 1f : 0.85f);
+    }
+
+    private void toggleMainOverlayPanel(View panel, View anchor) {
+        if (panel == null || anchor == null) return;
+        boolean shouldShow = panel.getVisibility() != View.VISIBLE;
+        hideAllMainOverlayPanels();
+        if (shouldShow) {
+            panel.setAlpha(0f);
+            panel.setVisibility(View.VISIBLE);
+            positionMainOverlayPanelAboveAnchor(panel, anchor);
+            panel.animate().alpha(1f).setDuration(130L).start();
+            showMainOverlayControls(false);
+        } else {
+            showMainOverlayControls(true);
+        }
+    }
+
+    private void positionMainOverlayPanelAboveAnchor(View panel, View anchor) {
+        if (panel == null || anchor == null || surfaceContainer == null) return;
+        panel.post(() -> {
+            int parentWidth = surfaceContainer.getWidth();
+            int panelWidth = panel.getWidth();
+            if (parentWidth <= 0 || panelWidth <= 0) return;
+            float centerX = anchor.getX() + (anchor.getWidth() / 2f);
+            float targetX = centerX - (panelWidth / 2f);
+            float minX = dpToPx(OVERLAY_PANEL_EDGE_DP);
+            float maxX = Math.max(minX, parentWidth - panelWidth - dpToPx(OVERLAY_PANEL_EDGE_DP));
+            panel.setX(Math.max(minX, Math.min(maxX, targetX)));
+
+            if (layoutOverlayControls != null) {
+                float targetY = layoutOverlayControls.getY() - panel.getHeight() - dpToPx(OVERLAY_PANEL_GAP_DP);
+                panel.setY(Math.max(dpToPx(OVERLAY_PANEL_EDGE_DP), targetY));
+            }
+        });
+    }
+
+    private void applyMainOverlayUiScale(boolean fullScreenMode) {
+        if (layoutOverlayControls != null) {
+            int horizontal = dpToPx(fullScreenMode ? 12 : 8);
+            int vertical = dpToPx(fullScreenMode ? 10 : 6);
+            layoutOverlayControls.setPadding(horizontal, vertical, horizontal, vertical);
+        }
+
+        setViewSizeDp(btnOverlayPlayPause, fullScreenMode ? 44 : 34, fullScreenMode ? 44 : 34);
+        setViewSizeDp(btnOverlayVolumeEntry, fullScreenMode ? 40 : 32, fullScreenMode ? 40 : 32);
+        setViewSizeDp(btnOverlaySettings, fullScreenMode ? 40 : 32, fullScreenMode ? 40 : 32);
+        setViewSizeDp(btnFullScreen, fullScreenMode ? 40 : 32, fullScreenMode ? 40 : 32);
+
+        if (btnOverlaySpeedEntry != null) {
+            ViewGroup.LayoutParams lp = btnOverlaySpeedEntry.getLayoutParams();
+            if (lp != null) {
+                lp.height = dpToPx(fullScreenMode ? 44 : 38);
+                btnOverlaySpeedEntry.setLayoutParams(lp);
+            }
+            btnOverlaySpeedEntry.setMinWidth(dpToPx(fullScreenMode ? 100 : 84));
+            btnOverlaySpeedEntry.setMinHeight(dpToPx(fullScreenMode ? 44 : 38));
+            btnOverlaySpeedEntry.setTextSize(fullScreenMode ? 15f : 13f);
+        }
+
+        setTextWidthAndSizeDp(tvOverlayCurrentTime, fullScreenMode ? 56 : 44, fullScreenMode ? 14f : 12f);
+        setTextWidthAndSizeDp(tvOverlayTotalTime, fullScreenMode ? 56 : 44, fullScreenMode ? 14f : 12f);
+
+        setPanelWidthAndPaddingDp(layoutOverlaySpeedPanel, fullScreenMode ? 108 : 92, fullScreenMode ? 12 : 10);
+        setSpeedItemSize(tvOverlaySpeed200, fullScreenMode);
+        setSpeedItemSize(tvOverlaySpeed150, fullScreenMode);
+        setSpeedItemSize(tvOverlaySpeed125, fullScreenMode);
+        setSpeedItemSize(tvOverlaySpeed100, fullScreenMode);
+        setSpeedItemSize(tvOverlaySpeed075, fullScreenMode);
+        setSpeedItemSize(tvOverlaySpeed050, fullScreenMode);
+
+        setPanelSizeAndPaddingDp(layoutOverlayVolumePanel,
+                fullScreenMode ? 108 : 92,
+                fullScreenMode ? 250 : 220,
+                fullScreenMode ? 12 : 10);
+        if (tvMainVolumeValue != null) {
+            tvMainVolumeValue.setTextSize(fullScreenMode ? 16f : 14f);
+        }
+        setViewSizeDp(seekMainVolume, fullScreenMode ? 186 : 158, fullScreenMode ? 44 : 40);
+
+        setPanelWidthAndPaddingDp(layoutOverlaySettingPanel, fullScreenMode ? 300 : 260, fullScreenMode ? 12 : 10);
+        updateSettingPanelRows(layoutOverlaySettingPanel, fullScreenMode);
+    }
+
+    private void setSpeedItemSize(TextView view, boolean fullScreenMode) {
+        if (view == null) return;
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp != null) {
+            lp.height = dpToPx(fullScreenMode ? 44 : 38);
+            view.setLayoutParams(lp);
+        }
+        view.setTextSize(fullScreenMode ? 15f : 14f);
+    }
+
+    private void setPanelWidthAndPaddingDp(View panel, int widthDp, int paddingDp) {
+        if (panel == null) return;
+        ViewGroup.LayoutParams lp = panel.getLayoutParams();
+        if (lp != null) {
+            lp.width = dpToPx(widthDp);
+            panel.setLayoutParams(lp);
+        }
+        int p = dpToPx(paddingDp);
+        panel.setPadding(p, p, p, p);
+    }
+
+    private void setPanelSizeAndPaddingDp(View panel, int widthDp, int heightDp, int paddingDp) {
+        if (panel == null) return;
+        ViewGroup.LayoutParams lp = panel.getLayoutParams();
+        if (lp != null) {
+            lp.width = dpToPx(widthDp);
+            lp.height = dpToPx(heightDp);
+            panel.setLayoutParams(lp);
+        }
+        int p = dpToPx(paddingDp);
+        panel.setPadding(p, p, p, p);
+    }
+
+    private void setViewSizeDp(View view, int widthDp, int heightDp) {
+        if (view == null) return;
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp == null) return;
+        lp.width = dpToPx(widthDp);
+        lp.height = dpToPx(heightDp);
+        view.setLayoutParams(lp);
+    }
+
+    private void setTextWidthAndSizeDp(TextView view, int widthDp, float sizeSp) {
+        if (view == null) return;
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp != null) {
+            lp.width = dpToPx(widthDp);
+            view.setLayoutParams(lp);
+        }
+        view.setTextSize(sizeSp);
+    }
+
+    private void updateSettingPanelRows(View panel, boolean fullScreenMode) {
+        if (!(panel instanceof LinearLayout)) return;
+        LinearLayout container = (LinearLayout) panel;
+        int rowHeight = dpToPx(fullScreenMode ? 56 : 48);
+        int secondTopMargin = dpToPx(fullScreenMode ? 10 : 8);
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (!(child instanceof LinearLayout)) continue;
+            ViewGroup.LayoutParams baseParams = child.getLayoutParams();
+            if (baseParams instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) baseParams;
+                mlp.height = rowHeight;
+                mlp.topMargin = (i == 0) ? 0 : secondTopMargin;
+                child.setLayoutParams(mlp);
+            } else {
+                baseParams.height = rowHeight;
+                child.setLayoutParams(baseParams);
+            }
+            LinearLayout row = (LinearLayout) child;
+            View title = row.getChildAt(0);
+            if (title instanceof TextView) {
+                ((TextView) title).setTextSize(fullScreenMode ? 16f : 15f);
+            }
+        }
+    }
+
+    private void hideAllMainOverlayPanels() {
+        hideMainOverlayPanel(layoutOverlaySpeedPanel);
+        hideMainOverlayPanel(layoutOverlayVolumePanel);
+        hideMainOverlayPanel(layoutOverlaySettingPanel);
+    }
+
+    private void hideMainOverlayPanel(View panel) {
+        if (panel == null || panel.getVisibility() != View.VISIBLE) return;
+        panel.animate().cancel();
+        panel.setVisibility(View.GONE);
+        panel.setAlpha(1f);
+    }
+
+    private boolean isAnyMainOverlayPanelVisible() {
+        return (layoutOverlaySpeedPanel != null && layoutOverlaySpeedPanel.getVisibility() == View.VISIBLE)
+                || (layoutOverlayVolumePanel != null && layoutOverlayVolumePanel.getVisibility() == View.VISIBLE)
+                || (layoutOverlaySettingPanel != null && layoutOverlaySettingPanel.getVisibility() == View.VISIBLE);
+    }
+
+    private void showMainOverlayControls(boolean allowAutoHide) {
+        if (layoutOverlayControls == null) return;
+        overlayControlsVisible = true;
+        layoutOverlayControls.animate().cancel();
+        if (layoutOverlayControls.getVisibility() != View.VISIBLE) {
+            layoutOverlayControls.setAlpha(0f);
+            layoutOverlayControls.setVisibility(View.VISIBLE);
+        }
+        layoutOverlayControls.animate().alpha(1f).setDuration(120L).start();
+        if (allowAutoHide) {
+            scheduleMainOverlayAutoHideIfNeeded();
+        } else {
+            cancelMainOverlayAutoHide();
+        }
+    }
+
+    private void hideMainOverlayControlsAnimated() {
+        if (layoutOverlayControls == null) return;
+        if (!overlayControlsVisible) return;
+        hideAllMainOverlayPanels();
+        overlayControlsVisible = false;
+        cancelMainOverlayAutoHide();
+        layoutOverlayControls.animate().cancel();
+        layoutOverlayControls.animate()
+                .alpha(0f)
+                .setDuration(OVERLAY_FADE_DURATION_MS)
+                .withEndAction(() -> {
+                    if (!overlayControlsVisible && layoutOverlayControls != null) {
+                        layoutOverlayControls.setVisibility(View.GONE);
+                        layoutOverlayControls.setAlpha(1f);
+                    }
+                }).start();
+    }
+
+    private void scheduleMainOverlayAutoHideIfNeeded() {
+        cancelMainOverlayAutoHide();
+        if (!overlayControlsVisible) return;
+        if (isAnyMainOverlayPanelVisible()) return;
+        if (!isPlayerPlayingSafely(mediaPlayer)) return;
+        uiHandler.postDelayed(hideMainOverlayRunnable, OVERLAY_AUTO_HIDE_MS);
+    }
+
+    private void cancelMainOverlayAutoHide() {
+        uiHandler.removeCallbacks(hideMainOverlayRunnable);
+    }
+
+    private void toggleMainPlaybackFromGesture() {
+        if (mediaPlayer == null) {
+            Toast.makeText(getApplicationContext(), "请先选择主屏媒体文件", Toast.LENGTH_SHORT).show();
+            showMainOverlayControls(false);
+            return;
+        }
+        if (!isAudioDeviceSet) {
+            Toast.makeText(getApplicationContext(), "请选择主屏音频通道", Toast.LENGTH_SHORT).show();
+            showMainOverlayControls(false);
+            return;
+        }
+        toggleMediaPlayer(mediaPlayer, isAudioDeviceSet, btnMainPlay);
+        showMainCenterPlayState(isPlayerPlayingSafely(mediaPlayer));
+        showMainOverlayControls(true);
+    }
+
+    private void showMainCenterPlayState(boolean playingAfterToggle) {
+        if (ivCenterPlayState == null) return;
+        uiHandler.removeCallbacks(hideCenterPlayStateRunnable);
+        ivCenterPlayState.animate().cancel();
+        ivCenterPlayState.setImageResource(playingAfterToggle ? R.drawable.ic_play_triangle : R.drawable.ic_pause_simple);
+        ivCenterPlayState.setAlpha(0f);
+        ivCenterPlayState.setVisibility(View.VISIBLE);
+        ivCenterPlayState.animate().alpha(0.96f).setDuration(110L).start();
+        uiHandler.postDelayed(hideCenterPlayStateRunnable, CENTER_PLAY_ICON_DURATION_MS);
+    }
+
+    private void setupMainProgressSeekBar(SeekBar seekBar, boolean overlay) {
+        seekBar.setMax(1000);
+        seekBar.setProgress(0);
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                if (!fromUser || mediaPlayer == null) return;
+                int durationMs = safeGetDuration(mediaPlayer);
+                if (durationMs <= 0) return;
+                int targetMs = (int) ((progress / 1000f) * durationMs);
+                if (tvOverlayCurrentTime != null && overlay) {
+                    tvOverlayCurrentTime.setText(formatTimeMs(targetMs));
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar bar) {
+                showMainOverlayControls(false);
+                if (overlay) {
+                    overlayProgressUserSeeking = true;
+                }
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar bar) {
+                if (overlay) {
+                    overlayProgressUserSeeking = false;
+                }
+                if (mediaPlayer == null) return;
+                int durationMs = safeGetDuration(mediaPlayer);
+                if (durationMs <= 0) return;
+                int targetMs = (int) ((bar.getProgress() / 1000f) * durationMs);
+                safeSeekMainTo(targetMs);
+                updateMainProgressUi();
+                updateOverlayMainProgressUi();
+                showMainOverlayControls(true);
+            }
+        });
+    }
+
+    private void setupSubProgressSeekBar(SeekBar seekBar) {
+        seekBar.setMax(1000);
+        seekBar.setProgress(0);
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                MediaPlayer subPlayer = getPresentationPlayer();
+                if (!fromUser || subPlayer == null) return;
+                int durationMs = safeGetDuration(subPlayer);
+                if (durationMs <= 0) return;
+                int targetMs = (int) ((progress / 1000f) * durationMs);
+                if (tvSubCurrentTime != null) {
+                    tvSubCurrentTime.setText(formatTimeMs(targetMs));
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar bar) {
+                subProgressUserSeeking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar bar) {
+                subProgressUserSeeking = false;
+                MediaPlayer subPlayer = getPresentationPlayer();
+                if (subPlayer == null) return;
+                int durationMs = safeGetDuration(subPlayer);
+                if (durationMs <= 0) return;
+                int targetMs = (int) ((bar.getProgress() / 1000f) * durationMs);
+                safeSeekPresentationTo(targetMs);
+                updateSubProgressUi();
+            }
+        });
+    }
+
+    private void startMainProgressUpdater() {
+        uiHandler.removeCallbacks(mainProgressUpdater);
+        uiHandler.post(mainProgressUpdater);
+    }
+
+    private void updateMainProgressUi() {
+        if (mediaPlayer == null) {
+            updateMainPlayVisuals();
+            cancelMainOverlayAutoHide();
+            return;
+        }
+        updateMainPlayVisuals();
+        scheduleMainOverlayAutoHideIfNeeded();
+    }
+
+    private void updateOverlayMainProgressUi() {
+        if (seekOverlayProgress == null || tvOverlayCurrentTime == null || tvOverlayTotalTime == null) return;
+        if (mediaPlayer == null) {
+            if (!overlayProgressUserSeeking) {
+                seekOverlayProgress.setProgress(0);
+            }
+            tvOverlayCurrentTime.setText("00:00");
+            tvOverlayTotalTime.setText("00:00");
+            updateMainPlayVisuals();
+            cancelMainOverlayAutoHide();
+            return;
+        }
+        int durationMs = safeGetDuration(mediaPlayer);
+        int currentMs = safeGetCurrentPosition(mediaPlayer);
+        if (!overlayProgressUserSeeking) {
+            int progress = durationMs > 0 ? (int) ((currentMs * 1000f) / durationMs) : 0;
+            seekOverlayProgress.setProgress(Math.max(0, Math.min(1000, progress)));
+            tvOverlayCurrentTime.setText(formatTimeMs(currentMs));
+        }
+        tvOverlayTotalTime.setText(formatTimeMs(Math.max(durationMs, 0)));
+        updateMainPlayVisuals();
+        scheduleMainOverlayAutoHideIfNeeded();
+    }
+
+    private void updateSubProgressUi() {
+        if (seekSubProgress == null || tvSubCurrentTime == null || tvSubTotalTime == null) return;
+        MediaPlayer subPlayer = getPresentationPlayer();
+        if (subPlayer == null) {
+            if (!subProgressUserSeeking) {
+                seekSubProgress.setProgress(0);
+            }
+            tvSubCurrentTime.setText("00:00");
+            tvSubTotalTime.setText("00:00");
+            return;
+        }
+        int durationMs = safeGetDuration(subPlayer);
+        int currentMs = safeGetCurrentPosition(subPlayer);
+        if (!subProgressUserSeeking) {
+            int progress = durationMs > 0 ? (int) ((currentMs * 1000f) / durationMs) : 0;
+            seekSubProgress.setProgress(Math.max(0, Math.min(1000, progress)));
+            tvSubCurrentTime.setText(formatTimeMs(currentMs));
+        }
+        tvSubTotalTime.setText(formatTimeMs(Math.max(durationMs, 0)));
+    }
+
+    private void seekPresentationBy(int deltaMs) {
+        MediaPlayer subPlayer = getPresentationPlayer();
+        if (subPlayer == null) {
+            Toast.makeText(getApplicationContext(), "请先选择副屏媒体文件", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int currentMs = safeGetCurrentPosition(subPlayer);
+        int durationMs = safeGetDuration(subPlayer);
+        if (durationMs <= 0) return;
+        int targetMs = Math.max(0, Math.min(durationMs, currentMs + deltaMs));
+        safeSeekPresentationTo(targetMs);
+        updateSubProgressUi();
+    }
+
+    private void safeSeekMainTo(int targetMs) {
+        if (mediaPlayer == null) return;
+        try {
+            mediaPlayer.seekTo(targetMs);
+        } catch (IllegalStateException e) {
+            Log.w("MediaPlayer", "主屏 seekTo 失败", e);
+        }
+    }
+
+    private void safeSeekPresentationTo(int targetMs) {
+        MediaPlayer subPlayer = getPresentationPlayer();
+        if (subPlayer == null) return;
+        try {
+            subPlayer.seekTo(targetMs);
+        } catch (IllegalStateException e) {
+            Log.w("MediaPlayer", "副屏 seekTo 失败", e);
+        }
+    }
+
+    private int safeGetCurrentPosition(MediaPlayer player) {
+        if (player == null) return 0;
+        try {
+            return player.getCurrentPosition();
+        } catch (IllegalStateException e) {
+            return 0;
+        }
+    }
+
+    private int safeGetDuration(MediaPlayer player) {
+        if (player == null) return 0;
+        try {
+            return player.getDuration();
+        } catch (IllegalStateException e) {
+            return 0;
+        }
+    }
+
+    private MediaPlayer getPresentationPlayer() {
+        return (presentation != null) ? presentation.mediaPlayer : null;
+    }
+
+    private boolean isPlayerPlayingSafely(MediaPlayer player) {
+        if (player == null) return false;
+        try {
+            return player.isPlaying();
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
+    private void updateMainPlayVisuals() {
+        boolean hasPlayer = mediaPlayer != null;
+        boolean isPlaying = isPlayerPlayingSafely(mediaPlayer);
+        if (btnMainPlay != null) {
+            btnMainPlay.setText(isPlaying ? "暂停" : "主屏播放");
+        }
+        if (btnOverlayPlayPause != null) {
+            btnOverlayPlayPause.setEnabled(hasPlayer);
+            btnOverlayPlayPause.setAlpha(hasPlayer ? 0.96f : 0.45f);
+            btnOverlayPlayPause.setImageResource(isPlaying ? R.drawable.ic_pause_simple : R.drawable.ic_play_triangle);
+            btnOverlayPlayPause.setContentDescription(isPlaying ? "暂停" : "播放");
+        }
+        if (!isPlaying) {
+            cancelMainOverlayAutoHide();
+        } else {
+            scheduleMainOverlayAutoHideIfNeeded();
+        }
+    }
+
+    private void updateFullScreenIcon() {
+        if (btnFullScreen == null) return;
+        btnFullScreen.setImageResource(isFullScreen ? R.drawable.ic_fullscreen_exit : R.drawable.ic_fullscreen_enter);
+        btnFullScreen.setContentDescription(isFullScreen ? "退出全屏" : "进入全屏");
+    }
+
+    private void applyMainPlayerVolume() {
+        if (mediaPlayer == null) return;
+        try {
+            mediaPlayer.setVolume(mainPlayerVolume, mainPlayerVolume);
+        } catch (IllegalStateException e) {
+            Log.w("MediaPlayer", "主屏音量设置失败", e);
+        }
+    }
+
+    private void applyPresentationPlayerSettings() {
+        if (presentation == null) return;
+        try {
+            presentation.setLoopingEnabled(loopModeEnabled);
+            presentation.setAutoPlayEnabled(autoPlayEnabled);
+            presentation.setPlayerVolume(presentationPlayerVolume);
+            presentation.setSpeedPresetIndex(currentSubSpeedPresetIndex);
+            if (presentation.mediaPlayer != null) {
+                presentation.applyOverlayPlaybackSettings();
+                updateSubProgressUi();
+            }
+        } catch (IllegalStateException e) {
+            Log.w("MediaPlayer", "副屏参数设置失败", e);
+        }
+    }
+
+    private void applyLoopModeToPlayers() {
+        if (mediaPlayer != null) {
+            try {
+                mediaPlayer.setLooping(loopModeEnabled);
+            } catch (IllegalStateException e) {
+                Log.w("MediaPlayer", "主屏循环模式设置失败", e);
+            }
+        }
+        applyPresentationPlayerSettings();
+    }
+
+    private void applyMainPlaybackSpeed() {
+        if (mediaPlayer == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        float speed = SPEED_PRESETS[currentSpeedPresetIndex];
+        try {
+            PlaybackParams params = mediaPlayer.getPlaybackParams();
+            if (params == null) params = new PlaybackParams();
+            params.setSpeed(speed);
+            params.setPitch(1.0f);
+            mediaPlayer.setPlaybackParams(params);
+        } catch (Exception e) {
+            Log.w("MediaPlayer", "主屏倍速设置失败", e);
+        }
+    }
+
+    private void applyPresentationPlaybackSpeed() {
+        MediaPlayer subPlayer = getPresentationPlayer();
+        if (subPlayer == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        float speed = SPEED_PRESETS[currentSubSpeedPresetIndex];
+        try {
+            PlaybackParams params = subPlayer.getPlaybackParams();
+            if (params == null) params = new PlaybackParams();
+            params.setSpeed(speed);
+            params.setPitch(1.0f);
+            subPlayer.setPlaybackParams(params);
+        } catch (Exception e) {
+            Log.w("MediaPlayer", "副屏倍速设置失败", e);
+        }
+    }
+
+    private void updateSpeedButtonLabel() {
+        if (btnOverlaySpeedEntry != null) {
+            btnOverlaySpeedEntry.setText("倍速");
+        }
+        updateMainSpeedButtonVisualState();
+    }
+
+    private void updateSubSpeedButtonLabel() {
+        if (btnSubSpeed == null) return;
+        btnSubSpeed.setText(String.format(Locale.US, "副屏 %.2fx", SPEED_PRESETS[currentSubSpeedPresetIndex]));
+    }
+
+    private void updateLoopButtonLabel() {
+        if (switchOverlayLoop != null && switchOverlayLoop.isChecked() != loopModeEnabled) {
+            switchOverlayLoop.setChecked(loopModeEnabled);
+        }
+    }
+
+    private void updateVolumeLabels() {
+        if (tvMainVolumeValue != null) {
+            tvMainVolumeValue.setText(String.valueOf((int) (mainPlayerVolume * 100)));
+        }
+        if (tvSubVolumeValue != null) {
+            tvSubVolumeValue.setText((int) (presentationPlayerVolume * 100) + "%");
+        }
+        if (seekMainVolume != null) {
+            int target = (int) (mainPlayerVolume * 100);
+            if (seekMainVolume.getProgress() != target) {
+                seekMainVolume.setProgress(target);
+            }
+        }
+    }
+
+    private String formatTimeMs(int totalMs) {
+        int safeMs = Math.max(totalMs, 0);
+        int totalSeconds = safeMs / 1000;
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format(Locale.US, "%02d:%02d", minutes, seconds);
     }
 
     private void disableInteractionSoundEffects(View... views) {
@@ -438,6 +1393,26 @@ public class MainActivity extends AppCompatActivity {
             displaySpinner.setEnabled(hasSubDisplay);
             displaySpinner.setAlpha(hasSubDisplay ? enabledAlpha : 0.55f);
         }
+        if (seekSubProgress != null) {
+            seekSubProgress.setEnabled(hasSubDisplay);
+            seekSubProgress.setAlpha(hasSubDisplay ? enabledAlpha : 0.55f);
+        }
+        if (seekSubVolume != null) {
+            seekSubVolume.setEnabled(hasSubDisplay);
+            seekSubVolume.setAlpha(hasSubDisplay ? enabledAlpha : 0.55f);
+        }
+        if (btnSubSeekBack10 != null) {
+            btnSubSeekBack10.setEnabled(hasSubDisplay);
+            btnSubSeekBack10.setAlpha(hasSubDisplay ? enabledAlpha : disabledAlpha);
+        }
+        if (btnSubSeekForward10 != null) {
+            btnSubSeekForward10.setEnabled(hasSubDisplay);
+            btnSubSeekForward10.setAlpha(hasSubDisplay ? enabledAlpha : disabledAlpha);
+        }
+        if (btnSubSpeed != null) {
+            btnSubSpeed.setEnabled(hasSubDisplay);
+            btnSubSpeed.setAlpha(hasSubDisplay ? enabledAlpha : disabledAlpha);
+        }
     }
 
     private void updateRouteSummaryTexts() {
@@ -502,6 +1477,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyInlineFullScreen(boolean enable) {
         cacheNonPlayerViews();
+        hideAllMainOverlayPanels();
         ViewGroup.LayoutParams params = surfaceContainer.getLayoutParams();
         if (!(params instanceof ViewGroup.MarginLayoutParams)) {
             return;
@@ -558,8 +1534,10 @@ public class MainActivity extends AppCompatActivity {
             lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
             lp.topMargin = 0;
             surfaceContainer.setLayoutParams(lp);
-            btnFullScreen.setText("退出全屏");
+            updateFullScreenIcon();
+            applyMainOverlayUiScale(true);
             applyImmersiveMode(getWindow());
+            showMainOverlayControls(true);
         } else {
             for (View view : nonPlayerViews) {
                 view.setVisibility(View.VISIBLE);
@@ -591,9 +1569,11 @@ public class MainActivity extends AppCompatActivity {
             if (btnMainPlay != null) {
                 btnMainPlay.setVisibility(View.VISIBLE);
             }
-            btnFullScreen.setText("全屏");
+            updateFullScreenIcon();
+            applyMainOverlayUiScale(false);
             clearImmersiveMode();
             scrollToInlinePreview();
+            showMainOverlayControls(true);
         }
     }
 
@@ -736,17 +1716,23 @@ public class MainActivity extends AppCompatActivity {
                 if (mediaPlayer.isPlaying()) {
                     mediaPlayer.pause();
                     buttonText.setText("主屏播放");
+                    updateMainProgressUi();
                 } else {
                     mediaPlayer.start();
                     scheduleMainSyncNudge("main-manual-start");
                     buttonText.setText("暂停");
+                    updateMainProgressUi();
                 }
+                updateOverlayMainProgressUi();
+                updateMainPlayVisuals();
+                showMainOverlayControls(mediaPlayer.isPlaying());
             } else {
                 Toast.makeText(getApplicationContext(), "请选择音频通道", Toast.LENGTH_SHORT).show();
             }
         } else {
             Toast.makeText(getApplicationContext(), "请选择媒体文件", Toast.LENGTH_SHORT).show();
         }
+        updateMainPlayVisuals();
     }
 
     // 通用方法：设置音频设备并恢复播放状态
@@ -887,9 +1873,11 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         MediaPlayer player = presentation.mediaPlayer;
+        applyPresentationPlayerSettings();
         if (player.isPlaying()) {
             player.pause();
             buttonText.setText("副屏播放");
+            updateSubProgressUi();
             return;
         }
 
@@ -897,6 +1885,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             player.start();
             buttonText.setText("暂停");
+            updateSubProgressUi();
             scheduleMainSyncNudge("presentation-start");
             uiHandler.postDelayed(() -> {
                 try {
@@ -932,6 +1921,7 @@ public class MainActivity extends AppCompatActivity {
         boolean wasPlaying = presentation.mediaPlayer.isPlaying();
         Log.d("AudioDevice", "presentation.setAudioDevice(selectedDeviceCache)");
         presentation.setAudioDevice(targetDevice);
+        applyPresentationPlayerSettings();
         maybePrimePresentationOutput("route-switch");
         if (wasPlaying && !presentation.mediaPlayer.isPlaying()) {
             try {
@@ -959,6 +1949,12 @@ public class MainActivity extends AppCompatActivity {
             Intent data = result.getData();
             if (data != null && data.getData() != null) {
                 toggleSelectedUri = data.getData();
+                int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                try {
+                    getContentResolver().takePersistableUriPermission(toggleSelectedUri, takeFlags);
+                } catch (Exception e) {
+                    Log.w("ActivityResult", "持久化 URI 权限失败", e);
+                }
                 filePath = getRealPathFromURI(toggleSelectedUri);
                 if (filePath != null) {
                     if (isPresentation) {
@@ -982,6 +1978,7 @@ public class MainActivity extends AppCompatActivity {
                             Surface presentationSurface = getPresentationSurface();
                             if (presentationSurface != null && presentationSurface.isValid()) {
                                 presentation.initMediaPlayer(presentionselectedUri, presentationSurface);
+                                applyPresentationPlayerSettings();
                                 if (selectedDeviceCache != null) {
                                     presentation.setAudioDevice(selectedDeviceCache);
                                     maybePrimePresentationOutput("file-selected");
@@ -1008,6 +2005,12 @@ public class MainActivity extends AppCompatActivity {
 
                         // 更新主屏的 previousFilePath
                         previousMainScreenFilePath = filePath;
+                        if (autoPlayEnabled && surface != null && surface.isValid()) {
+                            initMediaPlayer(selectedUri, surface);
+                            if (selectedDevice != null) {
+                                setAudioDevice(selectedDevice);
+                            }
+                        }
                     }
 
                 } else {
@@ -1050,10 +2053,33 @@ public class MainActivity extends AppCompatActivity {
             mediaPlayer.setOnPreparedListener(mp -> {
                 Log.d("MediaPlayer", "播放器准备完毕");
                 applyMainSyncParams(mp, "main-prepared");
+                applyMainPlayerVolume();
+                applyMainPlaybackSpeed();
+                applyLoopModeToPlayers();
                 // 恢复播放状态
                 Log.d("MediaPlayer", "准备恢复restorePlaybackState");
                 restorePlaybackState();
+                if (autoPlayEnabled && isAudioDeviceSet && !isPlayerPlayingSafely(mp)) {
+                    try {
+                        mp.start();
+                        scheduleMainSyncNudge("main-autoplay");
+                    } catch (IllegalStateException e) {
+                        Log.w("MediaPlayer", "主屏自动开播失败", e);
+                    }
+                }
+                updateMainProgressUi();
+                updateOverlayMainProgressUi();
+                updateMainPlayVisuals();
+                showMainOverlayControls(true);
 
+            });
+            mediaPlayer.setOnCompletionListener(mp -> {
+                if (!loopModeEnabled) {
+                    updateMainPlayVisuals();
+                    showMainOverlayControls(false);
+                }
+                updateMainProgressUi();
+                updateOverlayMainProgressUi();
             });
             mediaPlayer.prepareAsync(); // 异步准备播放
         } catch (IOException e) {
@@ -1244,6 +2270,7 @@ public class MainActivity extends AppCompatActivity {
                         newPresentation.show();
                     }
                     presentation = presentationMap.get(displayId);
+                    applyPresentationPlayerSettings();
                     return;
                 }
             }
@@ -1441,12 +2468,29 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        startMainProgressUpdater();
+        updateMainProgressUi();
+        updateSubProgressUi();
+        updateOverlayMainProgressUi();
+        updateMainPlayVisuals();
+        updateFullScreenIcon();
+        applyMainOverlayUiScale(isFullScreen);
+        showMainOverlayControls(true);
+    }
+
     @Override
     public void onStop() {
         if (isFullScreen) {
             isFullScreen = false;
             applyInlineFullScreen(false);
         }
+        uiHandler.removeCallbacks(mainProgressUpdater);
+        uiHandler.removeCallbacks(hideMainOverlayRunnable);
+        uiHandler.removeCallbacks(hideCenterPlayStateRunnable);
         uiHandler.removeCallbacks(applyRouteSwitchQueueRunnable);
         pendingMainRouteDevice = null;
         pendingPresentationRouteDevice = null;

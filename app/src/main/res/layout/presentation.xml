@@ -1,11 +1,279 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:background="#000000">
 
     <SurfaceView
         android:id="@+id/surface_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/view_presentation_tap_layer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/layout_presentation_overlay_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_overlay_control_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="6dp">
+
+        <ImageButton
+            android:id="@+id/btn_presentation_overlay_play_pause"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="@drawable/bg_overlay_icon_button"
+            android:contentDescription="播放"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_play_triangle"
+            android:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/tv_presentation_current_time"
+            android:layout_width="44dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="00:00"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+
+        <SeekBar
+            android:id="@+id/seek_presentation_progress"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:max="1000" />
+
+        <TextView
+            android:id="@+id/tv_presentation_total_time"
+            android:layout_width="44dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:gravity="end"
+            android:text="00:00"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btn_presentation_overlay_speed_entry"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_overlay_icon_button"
+            android:backgroundTint="@null"
+            android:gravity="center"
+            android:minWidth="84dp"
+            android:minHeight="38dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="倍速"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="13sp" />
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="1dp" />
+
+        <ImageButton
+            android:id="@+id/btn_presentation_overlay_volume_entry"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_overlay_icon_button"
+            android:contentDescription="副屏音量设置"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_volume_simple"
+            android:tint="@color/white" />
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="1dp" />
+
+        <ImageButton
+            android:id="@+id/btn_presentation_overlay_settings"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_overlay_icon_button"
+            android:contentDescription="副屏设置"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_settings_simple"
+            android:tint="@color/white" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout_presentation_overlay_speed_panel"
+        android:layout_width="92dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="8dp"
+        android:layout_marginBottom="58dp"
+        android:background="@drawable/bg_overlay_setting_panel"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_presentation_speed_200"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="2.0x"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tv_presentation_speed_150"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="1.5x"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tv_presentation_speed_125"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="1.25x"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tv_presentation_speed_100"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="1.0x"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tv_presentation_speed_075"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="0.75x"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tv_presentation_speed_050"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="0.5x"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/layout_presentation_overlay_volume_panel"
+        android:layout_width="92dp"
+        android:layout_height="220dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="8dp"
+        android:layout_marginBottom="58dp"
+        android:background="@drawable/bg_overlay_setting_panel"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_presentation_volume_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="100"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
+
+        <SeekBar
+            android:id="@+id/seek_presentation_volume"
+            android:layout_width="158dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:max="100"
+            android:progress="100"
+            android:progressTint="@color/brand_accent"
+            android:progressBackgroundTint="#80FFFFFF"
+            android:thumbTint="@color/brand_accent"
+            android:rotation="-90" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/layout_presentation_overlay_setting_panel"
+        android:layout_width="260dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="58dp"
+        android:background="@drawable/bg_overlay_setting_panel"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="循环播放"
+                android:textColor="@color/white"
+                android:textSize="15sp" />
+
+            <Switch
+                android:id="@+id/switch_presentation_overlay_loop"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="自动开播"
+                android:textColor="@color/white"
+                android:textSize="15sp" />
+
+            <Switch
+                android:id="@+id/switch_presentation_overlay_autoplay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/iv_presentation_center_play_state"
+        android:layout_width="58dp"
+        android:layout_height="58dp"
+        android:layout_gravity="center"
+        android:alpha="0.96"
+        android:background="@drawable/bg_overlay_icon_button"
+        android:padding="12dp"
+        android:src="@drawable/ic_play_triangle"
+        android:tint="@color/white"
+        android:visibility="gone" />
+</FrameLayout>
